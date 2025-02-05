@@ -1,0 +1,75 @@
+# Micro AIaaS
+## Project Context
+Every time you choose to apply a rule(s), explicitly state the rule(s) in the output. You can abbreviate the rule description to a single word of phrase
+
+# Project Context
+NextJS backend and React frontend for managing users and their scanned books.
+- Both backend and frontend are running on one Docker container. Other containers are PostgreSQL, Supertokens and Ollama
+- The system uses different roles for free users, pro users and admins.
+- Admins can see all logs, manage users and add models to llama.cpp servers
+- The system uses social logins for authenticating users
+
+## Code Style and Structure
+- Write concise, technical TypeScript code with accurate examples
+- Use functional and declarative programming patterns; avoid classes
+- Prefer iteration and modularization over code duplication
+- Use descriptive variable names with auxiliary verbs (e.g., isLoading, hasError)
+- Structure repository files as follows:
+backend/
+    src/
+        utils/        # Helper functions
+        types/        # TypeScript types
+        lib/          # Shared Libraries
+    test/             # Tests
+frontend/
+    src/
+        components/   # Shared React components
+        pages/        # Static pages
+        hooks/        # Custom React hooks
+        lib/          # Shared Libraries
+        types/        # Chrome storage utilities
+    /test             # Tests
+shared/
+    src/
+      types/          # TypeScript types, only used for shared types between server and extension
+      utils/          # Helper functions, only used for shared functions between server and extension
+
+## Tech Stack
+- NextJS - backend
+- React - frontend
+- Shadcn/ui for components
+- PostgreSQL for database
+- Redis for caching
+- Supertokens for authentication
+- Tesseract for OCR
+- Jest for testing
+
+## Testing
+- Write unit tests in /test for all new files and functions
+
+## Security
+- Implement Content Security Policy
+- Sanitize user input
+- Implement proper CORS handling
+
+## Git Usage
+Commit Message Prefixes:
+- "fix:" for bug fixes
+- "feat:" for new features
+- "perf:" for performance improvements
+- "docs:" for documentation changes
+- "style:" for formatting changes
+- "refactor:" for code refactoring
+- "test:" for adding missing tests
+- "chore:" for maintenance tasks
+Rules:
+- use lowercase for commit messages
+- keep  the summary line concise
+- Include description for non-obvious changes
+
+## Documentation
+- Maintain clear README with setup instructions
+- Document API interactions and data flows
+- Keep package.json well-documented
+- Include comments for complex logic
+- Document permission requirements
