@@ -1,0 +1,162 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 152 68% 96%;
+    --foreground: 160 80% 15%;
+
+    --card: 150 40% 98%;
+    --card-foreground: 160 80% 15%;
+
+    --popover: 150 40% 98%;
+    --popover-foreground: 160 80% 15%;
+
+    --primary: 160 84% 36%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 152 52% 90%;
+    --secondary-foreground: 160 80% 15%;
+
+    --muted: 150 30% 92%;
+    --muted-foreground: 155 20% 40%;
+
+    --accent: 45 96% 56%;
+    --accent-foreground: 160 80% 15%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 150 25% 85%;
+    --input: 150 25% 85%;
+    --ring: 160 84% 36%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 150 40% 98%;
+    --sidebar-foreground: 160 80% 15%;
+    --sidebar-primary: 160 84% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 152 52% 90%;
+    --sidebar-accent-foreground: 160 80% 15%;
+    --sidebar-border: 150 25% 85%;
+    --sidebar-ring: 160 84% 36%;
+  }
+
+  .dark {
+    --background: 160 30% 6%;
+    --foreground: 150 30% 92%;
+
+    --card: 160 25% 10%;
+    --card-foreground: 150 30% 92%;
+
+    --popover: 160 25% 10%;
+    --popover-foreground: 150 30% 92%;
+
+    --primary: 160 72% 42%;
+    --primary-foreground: 160 30% 6%;
+
+    --secondary: 160 20% 16%;
+    --secondary-foreground: 150 30% 92%;
+
+    --muted: 160 20% 16%;
+    --muted-foreground: 150 15% 60%;
+
+    --accent: 45 90% 50%;
+    --accent-foreground: 160 30% 6%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 150 30% 92%;
+
+    --border: 160 20% 18%;
+    --input: 160 20% 18%;
+    --ring: 160 72% 42%;
+
+    --sidebar-background: 160 25% 10%;
+    --sidebar-foreground: 150 30% 92%;
+    --sidebar-primary: 160 72% 42%;
+    --sidebar-primary-foreground: 160 30% 6%;
+    --sidebar-accent: 160 20% 16%;
+    --sidebar-accent-foreground: 150 30% 92%;
+    --sidebar-border: 160 20% 18%;
+    --sidebar-ring: 160 72% 42%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply min-h-screen overflow-x-hidden scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground min-h-screen font-sans overflow-x-hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold tracking-tight;
+  }
+
+  /* Smooth transition effects */
+  a, button, input, select, textarea {
+    @apply transition-all duration-200;
+  }
+
+  /* Glass effect - biophilic: frosted leaf */
+  .glass {
+    @apply bg-white/75 dark:bg-black/60 backdrop-blur-lg border border-emerald-200/30 dark:border-emerald-800/30;
+  }
+
+  /* Book card effect - organic rounded, natural shadow */
+  .book-card {
+    @apply relative overflow-hidden rounded-2xl bg-card transition-all duration-300;
+    box-shadow: 0 4px 24px rgba(5, 150, 105, 0.06);
+  }
+
+  .book-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px rgba(5, 150, 105, 0.12);
+  }
+
+  /* Cover image hover effect */
+  .cover-image {
+    @apply transition-all duration-300;
+  }
+
+  .cover-hover:hover .cover-image {
+    transform: scale(1.05);
+  }
+
+  /* Loading animation */
+  .loading-shimmer {
+    @apply relative overflow-hidden bg-emerald-100 dark:bg-emerald-900/30;
+  }
+
+  .loading-shimmer::after {
+    content: '';
+    @apply absolute top-0 left-0 w-full h-full;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.25),
+      transparent
+    );
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}

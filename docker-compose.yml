@@ -1,51 +1,80 @@
-version: '3.8'
-
 services:
   frontend:
-    container_name: bookscan-frontend
-    build: ./client
+    container_name: allmybooks-frontend
+    build:
+      context: ./library-scanster
+      dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
-    environment:
-      - REACT_APP_API_URL=http://localhost:4000
+      - "8100:8100"
+    volumes:
+      - ./library-scanster:/app
+      - /app/node_modules
     depends_on:
       - backend
+    networks:
+      - bookscan-net
+      - laradock_frontend
 
   backend:
-    container_name: bookscan-backend
-    build: 
+    container_name: allmybooks-backend
+    build:
       context: ./server
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     ports:
-      - "4000:4000"
+      - "4001:4001"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
     environment:
-      - DATABASE_URL=postgres://bookuser:securepass@postgres:5432/bookscan
+      - PORT=4001
+      - NODE_ENV=development
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379
       - OLLAMA_URL=http://ollama:11434
       - SUPERTOKENS_CONNECTION_URI=http://supertokens:3567
-      - NODE_ENV=production
+      - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY}
+      - FRONTEND_URL=https://local.allmybooks.com
+      - API_URL=https://local.allmybooks.com
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - CDN_STORAGE_ZONE_NAME=${CDN_STORAGE_ZONE_NAME}
+      - CDN_REGION=${CDN_REGION}
+      - CDN_PATH=${CDN_PATH}
+      - CDN_URL=${CDN_URL}
+      - CDN_API_KEY=${CDN_API_KEY}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - LITELLM_API_KEY=${LITELLM_API_KEY}
+      - EMBEDDINGS_URL=${EMBEDDINGS_URL}
+      - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL}
     depends_on:
       - postgres
       - redis
-      - ollama
       - supertokens
+    networks:
+      - bookscan-net
+      - laradock_frontend
+      - laradock_backend
 
   postgres:
     container_name: bookscan-postgres
-    image: postgres:15
+    image: pgvector/pgvector:pg15
+    ports:
+      - "5432:5432"
     environment:
-      - POSTGRES_USER=bookuser
-      - POSTGRES_PASSWORD=securepass
-      - POSTGRES_DB=bookscan
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    command: postgres -c 'shared_preload_libraries=pgvector'
+    command: postgres -c 'shared_preload_libraries=vector'
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bookuser -d bookscan"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
-      
+    networks:
+      - bookscan-net
+
   redis:
     container_name: bookscan-redis
     image: redis:7
@@ -54,6 +83,8 @@ services:
     command: redis-server --save 60 1 --loglevel warning
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+    networks:
+      - bookscan-net
 
   ollama:
     container_name: bookscan-ollama
@@ -66,13 +97,15 @@ services:
       resources:
         reservations:
           memory: 8GB
+    networks:
+      - bookscan-net
 
   supertokens:
     container_name: bookscan-supertokens
     image: supertokens/supertokens-postgresql
     environment:
-      - POSTGRESQL_USER=bookuser
-      - POSTGRESQL_PASSWORD=securepass
+      - POSTGRESQL_USER=${POSTGRES_USER}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRESQL_HOST=postgres
       - POSTGRESQL_PORT=5432
       - POSTGRESQL_DATABASE_NAME=auth
@@ -81,19 +114,15 @@ services:
         condition: service_healthy
     ports:
       - "3567:3567"
+    networks:
+      - bookscan-net
 
-  ocr-worker:
-    container_name: bookscan-ocr-worker
-    build:
-      context: ./ocr-service
-      dockerfile: Dockerfile
-    environment:
-      - REDIS_URL=redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - ./temp-images:/app/temp-images
+networks:
+  bookscan-net:
+  laradock_frontend:
+    external: true
+  laradock_backend:
+    external: true
 
 volumes:
   postgres-data:

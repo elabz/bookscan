@@ -1,0 +1,66 @@
+import { Book, Genre } from '@/types/book';
+
+// Convert our Book type to the DB row schema (snake_case)
+export const bookToDbFormat = (book: Book) => {
+  return {
+    id: book.id,
+    title: book.title,
+    authors: book.authors,
+    isbn: book.isbn || null,
+    cover_url: book.cover || null,
+    cover_small_url: book.coverSmall || null,
+    cover_large_url: book.coverLarge || null,
+    publisher: book.publisher || null,
+    published_date: book.publishedDate || null,
+    description: book.description || null,
+    page_count: book.pageCount || book.number_of_pages || null,
+    categories: book.categories || null,
+    language: book.language || null,
+    edition: book.edition || null,
+    width: book.width || null,
+    height: book.height || null,
+    identifiers: book.identifiers || null,
+    classifications: book.classifications || null,
+    links: book.links || null,
+    weight: book.weight || null,
+    url: book.url || null,
+    subjects: book.subjects || null,
+    publish_places: book.publish_places || null,
+    excerpts: book.excerpts || null,
+    number_of_pages: book.number_of_pages || book.pageCount || null,
+  };
+};
+
+// Convert from DB row (snake_case) to our Book type
+export const dbBookToAppFormat = (book: any, genres?: Genre[]): Book => {
+  return {
+    id: book.id,
+    title: book.title,
+    authors: book.authors,
+    isbn: book.isbn,
+    cover: book.cover_url,
+    coverSmall: book.cover_small_url,
+    coverLarge: book.cover_large_url,
+    publisher: book.publisher,
+    publishedDate: book.published_date,
+    description: book.description,
+    pageCount: book.page_count,
+    categories: book.categories,
+    language: book.language,
+    edition: book.edition,
+    width: book.width,
+    height: book.height,
+    genres: genres || [],
+    identifiers: book.identifiers,
+    classifications: book.classifications,
+    links: book.links,
+    weight: book.weight,
+    url: book.url,
+    subjects: book.subjects,
+    publish_places: book.publish_places,
+    excerpts: book.excerpts,
+    number_of_pages: book.number_of_pages,
+    createdAt: book.created_at,
+    updatedAt: book.updated_at,
+  };
+};

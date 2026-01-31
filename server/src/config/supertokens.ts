@@ -1,6 +1,7 @@
 import supertokens from 'supertokens-node';
 import Session from 'supertokens-node/recipe/session';
 import ThirdParty from 'supertokens-node/recipe/thirdparty';
+import EmailPassword from 'supertokens-node/recipe/emailpassword';
 import { TypeInput } from 'supertokens-node/types';
 
 const connectionURI = process.env.SUPERTOKENS_CONNECTION_URI || 'http://localhost:3567';
@@ -51,6 +52,7 @@ export const config: TypeInput = {
         }]
       }
     }),
+    EmailPassword.init(),
     Session.init()
   ],
   isInServerlessEnv: false

@@ -1,0 +1,249 @@
+
+import React, { createContext, useContext, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Book as BookType } from '@/types/book';
+import { addBook, searchOpenLibrary } from '@/services/bookService';
+import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchBookByISBN } from '@/services/isbnService';
+
+interface AddBookContextType {
+  searchResults: BookType[];
+  isSearching: boolean;
+  hasSearched: boolean;
+  newBook: Partial<BookType>;
+  isSubmitting: boolean;
+  foundBook: BookType | null;
+  handleSearch: (query: string) => Promise<void>;
+  handleManualChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
+  handleSubmitManual: (e: React.FormEvent) => Promise<void>;
+  handleSelectBook: (book: BookType) => Promise<void>;
+  handleIsbnSearch: (isbn: string) => Promise<void>;
+  handleAddScannedBook: () => Promise<void>;
+  setFoundBook: (book: BookType | null) => void;
+}
+
+const AddBookContext = createContext<AddBookContextType | undefined>(undefined);
+
+export const useAddBook = () => {
+  const context = useContext(AddBookContext);
+  if (context === undefined) {
+    throw new Error('useAddBook must be used within an AddBookProvider');
+  }
+  return context;
+};
+
+export const AddBookProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { userId } = useAuth();
+  const [searchResults, setSearchResults] = useState<BookType[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [newBook, setNewBook] = useState<Partial<BookType>>({
+    title: '',
+    authors: [''],
+    description: ''
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [foundBook, setFoundBook] = useState<BookType | null>(null);
+
+  const handleSearch = async (query: string) => {
+    try {
+      setIsSearching(true);
+      setHasSearched(true);
+      const results = await searchOpenLibrary(query);
+      setSearchResults(results);
+    } catch (error) {
+      console.error('Search failed:', error);
+      setSearchResults([]);
+      toast({
+        title: 'Search Failed',
+        description: 'Failed to fetch search results. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleManualChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    
+    if (name === 'author') {
+      setNewBook({
+        ...newBook,
+        authors: [value]
+      });
+    } else {
+      setNewBook({
+        ...newBook,
+        [name]: value
+      });
+    }
+  };
+
+  const handleSubmitManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newBook.title || !newBook.authors?.[0]) {
+      toast({
+        title: 'Missing Information',
+        description: 'Title and author are required fields.',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      const userIdString = userId ? String(userId) : undefined;
+      const createdBook = await addBook(newBook as BookType, userIdString);
+      
+      toast({
+        title: 'Book Added',
+        description: `"${createdBook.title}" has been added to your library.`
+      });
+      
+      navigate('/library');
+    } catch (error) {
+      console.error('Failed to add book:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add book. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelectBook = async (book: BookType) => {
+    try {
+      setIsSubmitting(true);
+      const userIdString = userId ? String(userId) : undefined;
+      const createdBook = await addBook(book, userIdString);
+      
+      toast({
+        title: 'Book Added',
+        description: `"${createdBook.title}" has been added to your library.`
+      });
+      
+      navigate('/library');
+    } catch (error) {
+      console.error('Failed to add book:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add book. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleIsbnSearch = async (isbn: string) => {
+    if (!isbn) return;
+    
+    setIsSearching(true);
+    setFoundBook(null);
+    
+    try {
+      toast({
+        title: "Searching...",
+        description: `Looking up ISBN: ${isbn}`,
+      });
+      
+      const bookData = await fetchBookByISBN(isbn);
+      
+      if (bookData) {
+        setFoundBook(bookData);
+        toast({
+          title: "Book Found!",
+          description: `"${bookData.title}" by ${bookData.authors?.[0] || 'Unknown Author'}`,
+        });
+      } else {
+        toast({
+          title: "Book Not Found",
+          description: "We couldn't find a book with that ISBN. Please check the number and try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error searching for book:', error);
+      toast({
+        title: "Search Failed",
+        description: "There was an error searching for the book. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleAddScannedBook = async () => {
+    if (!foundBook) {
+      toast({
+        title: "Error",
+        description: "No book found to add",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!userId) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to add books to your library",
+        variant: "destructive",
+      });
+      navigate('/login');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      console.log('Adding book to library with userId:', userId);
+      const addedBook = await addBook(foundBook, userId);
+      
+      toast({
+        title: "Success!",
+        description: `"${addedBook.title}" has been added to your library`,
+      });
+      
+      navigate('/library');
+    } catch (error) {
+      console.error('Failed to add book:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add book to your library. Please try again or check if you're signed in.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const value = {
+    searchResults,
+    isSearching,
+    hasSearched,
+    newBook,
+    isSubmitting,
+    foundBook,
+    handleSearch,
+    handleManualChange,
+    handleSubmitManual,
+    handleSelectBook,
+    handleIsbnSearch,
+    handleAddScannedBook,
+    setFoundBook
+  };
+
+  return (
+    <AddBookContext.Provider value={value}>
+      {children}
+    </AddBookContext.Provider>
+  );
+};
