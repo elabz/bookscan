@@ -8,13 +8,11 @@ BookScan is a personal library management system with ISBN barcode scanning, cov
 
 ## Architecture
 
-There are two distinct stacks that share a database concept but use different auth/data layers:
+The system uses a unified stack:
 
-1. **Server + Client (legacy)**: Express.js API + CRA React app. Uses Supertokens auth, direct PostgreSQL (with pgvector), Redis caching, Ollama embeddings, and a separate OCR worker service. Orchestrated via `docker-compose.yml`.
-
-2. **library-scanster (active frontend)**: Vite + React + Shadcn/ui + TailwindCSS. Uses Clerk for auth and Supabase as the backend (not the Express server). This is the more actively developed frontend.
-
-These two stacks do **not** share authentication or data access—the server uses Supertokens while library-scanster uses Clerk + Supabase.
+- **Server**: Express.js API with Supertokens auth, direct PostgreSQL (with pgvector), Redis caching, Ollama embeddings, Elasticsearch hybrid search, and a separate OCR worker service. Orchestrated via `docker-compose.yml`.
+- **Frontend (library-scanster)**: Vite + React + Shadcn/ui + TailwindCSS. Uses Supertokens for auth and the Express server as the backend.
+- **Image CDN**: Bunny.net CDN for cover images and book photos.
 
 ## Build and Dev Commands
 

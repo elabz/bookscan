@@ -6,6 +6,12 @@ import {
   getBookById,
   getFeaturedBooks,
   addBookToLibrary,
+  updateBook,
+  updateBookLocation,
+  getBookImages,
+  addBookImage,
+  deleteBookImage,
+  setImageAsCover,
   removeBookFromLibrary,
 } from '../controllers/library';
 
@@ -22,6 +28,12 @@ router.get('/', getUserBooks);
 router.get('/search', searchUserBooks);
 router.get('/book/:id', getBookById);
 router.post('/book', addBookToLibrary);
+router.patch('/book/:id', updateBook);
+router.patch('/book/:id/location', updateBookLocation);
+router.get('/book/:id/images', getBookImages);
+router.post('/book/:id/images', addBookImage);
+router.delete('/book/:id/images/:imageId', deleteBookImage);
+router.patch('/book/:id/images/:imageId/set-cover', setImageAsCover);
 router.delete('/book/:bookId', removeBookFromLibrary);
 
 export { router as libraryRoutes };

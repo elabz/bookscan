@@ -179,6 +179,204 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Update a book's details (owner only)
+export const updateBook = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { id } = req.params;
+    const updates = req.body;
+
+    // Verify user owns this book
+    const ownership = await pool.query(
+      'SELECT 1 FROM user_books WHERE user_id = $1 AND book_id = $2',
+      [userId, id]
+    );
+    if (ownership.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not own this book' });
+    }
+
+    // Build dynamic SET clause from allowed fields
+    const allowedFields: Record<string, string> = {
+      title: 'title',
+      authors: 'authors',
+      isbn: 'isbn',
+      publisher: 'publisher',
+      published_date: 'published_date',
+      description: 'description',
+      page_count: 'page_count',
+      language: 'language',
+      edition: 'edition',
+      width: 'width',
+      height: 'height',
+      cover_url: 'cover_url',
+      cover_small_url: 'cover_small_url',
+      cover_large_url: 'cover_large_url',
+    };
+
+    const setClauses: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    for (const [key, column] of Object.entries(allowedFields)) {
+      if (key in updates) {
+        let val = updates[key];
+        // JSON-stringify arrays/objects for jsonb/array columns
+        if (key === 'authors' && Array.isArray(val)) {
+          val = JSON.stringify(val);
+        }
+        setClauses.push(`${column} = $${paramIndex}`);
+        values.push(val ?? null);
+        paramIndex++;
+      }
+    }
+
+    if (setClauses.length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const result = await pool.query(
+      `UPDATE books SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating book:', err);
+    return res.status(500).json({ error: 'Failed to update book' });
+  }
+};
+
+// Update a book's location in user's library
+export const updateBookLocation = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { id } = req.params;
+    const { location_id } = req.body;
+
+    const result = await pool.query(
+      'UPDATE user_books SET location_id = $1 WHERE user_id = $2 AND book_id = $3 RETURNING *',
+      [location_id || null, userId, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Book not in your library' });
+    }
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error updating book location:', err);
+    return res.status(500).json({ error: 'Failed to update location' });
+  }
+};
+
+// Get images for a book
+export const getBookImages = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM book_images WHERE book_id = $1 ORDER BY sort_order, created_at',
+      [id]
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching book images:', err);
+    return res.status(500).json({ error: 'Failed to fetch images' });
+  }
+};
+
+// Add an image to a book
+export const addBookImage = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { id: bookId } = req.params;
+    const { url, url_small, url_large, is_cover, sort_order, caption } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ error: 'url is required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO book_images (book_id, user_id, url, url_small, url_large, is_cover, sort_order, caption)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [bookId, userId, url, url_small || null, url_large || null, is_cover || false, sort_order || 0, caption || null]
+    );
+
+    // If set as cover, update book's cover URLs and unset other covers
+    if (is_cover) {
+      await pool.query(
+        'UPDATE book_images SET is_cover = false WHERE book_id = $1 AND id != $2',
+        [bookId, result.rows[0].id]
+      );
+      await pool.query(
+        'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
+        [url, url_small || url, url_large || url, bookId]
+      );
+    }
+
+    return res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Error adding book image:', err);
+    return res.status(500).json({ error: 'Failed to add image' });
+  }
+};
+
+// Delete a book image
+export const deleteBookImage = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { id: bookId, imageId } = req.params;
+
+    await pool.query(
+      'DELETE FROM book_images WHERE id = $1 AND book_id = $2 AND user_id = $3',
+      [imageId, bookId, userId]
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting book image:', err);
+    return res.status(500).json({ error: 'Failed to delete image' });
+  }
+};
+
+// Set an image as the book's cover
+export const setImageAsCover = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { id: bookId, imageId } = req.params;
+
+    // Get the image
+    const imageResult = await pool.query(
+      'SELECT * FROM book_images WHERE id = $1 AND book_id = $2 AND user_id = $3',
+      [imageId, bookId, userId]
+    );
+    if (imageResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const image = imageResult.rows[0];
+
+    // Unset all covers for this book, set this one
+    await pool.query('UPDATE book_images SET is_cover = false WHERE book_id = $1', [bookId]);
+    await pool.query('UPDATE book_images SET is_cover = true WHERE id = $1', [imageId]);
+
+    // Update book cover URLs
+    await pool.query(
+      'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
+      [image.url, image.url_small || image.url, image.url_large || image.url, bookId]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Error setting cover:', err);
+    return res.status(500).json({ error: 'Failed to set cover' });
+  }
+};
+
 // Remove a book from user's library
 export const removeBookFromLibrary = async (req: AuthRequest, res: Response) => {
   try {

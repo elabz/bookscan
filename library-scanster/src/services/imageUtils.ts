@@ -38,6 +38,48 @@ export const fetchImageAsBlob = async (imageSource: string | File): Promise<Blob
 };
 
 /**
+ * Rotates an image by 90 degrees clockwise (or counter-clockwise)
+ */
+export const rotateImage = async (imageBlob: Blob, degrees: 90 | -90 | 180 = 90): Promise<Blob> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      reject(new Error('Could not get canvas context'));
+      return;
+    }
+
+    img.onload = () => {
+      try {
+        if (degrees === 90 || degrees === -90) {
+          canvas.width = img.height;
+          canvas.height = img.width;
+        } else {
+          canvas.width = img.width;
+          canvas.height = img.height;
+        }
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((degrees * Math.PI) / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('Failed to convert canvas to blob'));
+        }, 'image/jpeg', 0.9);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = URL.createObjectURL(imageBlob);
+  });
+};
+
+/**
  * Resizes an image to a specific width while maintaining aspect ratio
  */
 export const resizeImage = async (imageBlob: Blob, targetWidth: number): Promise<Blob> => {

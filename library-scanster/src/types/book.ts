@@ -76,6 +76,19 @@ export interface Book {
   number_of_pages?: number;
 }
 
+export interface BookImage {
+  id: string;
+  book_id: string;
+  user_id: string;
+  url: string;
+  url_small?: string;
+  url_large?: string;
+  is_cover: boolean;
+  sort_order: number;
+  caption?: string;
+  created_at: string;
+}
+
 export interface BookSearchResult {
   key: string;
   title: string;

@@ -18,6 +18,18 @@ export const addBookToLibrary = async (book: Book): Promise<Book | null> => {
   }
 };
 
+// Update a book's details
+export const updateBookDetails = async (bookId: string, book: Partial<Book>): Promise<Book | null> => {
+  try {
+    const dbBook = bookToDbFormat(book as Book);
+    const row = await api.patch<any>(`/library/book/${bookId}`, dbBook);
+    return dbBookToAppFormat(row);
+  } catch (error) {
+    console.error('Error in updateBookDetails:', error);
+    throw error;
+  }
+};
+
 // Remove a book from a user's library
 export const removeBookFromLibrary = async (bookId: string): Promise<boolean> => {
   try {

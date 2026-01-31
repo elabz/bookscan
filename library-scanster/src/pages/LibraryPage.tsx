@@ -5,9 +5,11 @@ import { PageLayout } from '@/components/layout/PageLayout';
 import { BookGrid } from '@/components/books/BookGrid';
 import { BookSearch } from '@/components/books/BookSearch';
 import { GenreFilter } from '@/components/books/GenreFilter';
+import { LibraryStats } from '@/components/library/LibraryStats';
+import { LibraryFilters } from '@/components/library/LibraryFilters';
 import { Button } from '@/components/ui/button';
 import { Book as BookType } from '@/types/book';
-import { BookPlus } from 'lucide-react';
+import { BookPlus, Settings2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -19,6 +21,9 @@ const LibraryPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [showManageSection, setShowManageSection] = useState(false);
   const { userId, isSignedIn } = useAuth();
   const { toast } = useToast();
 
@@ -159,7 +164,16 @@ const LibraryPage = () => {
               isLoading={genresLoading || booksLoading}
             />
           </div>
+
+          <LibraryFilters
+            selectedLocationId={selectedLocationId}
+            selectedCollectionId={selectedCollectionId}
+            onLocationChange={setSelectedLocationId}
+            onCollectionChange={setSelectedCollectionId}
+          />
         </div>
+
+        <LibraryStats />
 
         <div className="mb-16">
           <BookGrid

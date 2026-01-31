@@ -9,6 +9,9 @@ import { libraryRoutes } from './routes/library';
 import { genreRoutes } from './routes/genres';
 import { imageRoutes } from './routes/images';
 import { searchRoutes } from './routes/search';
+import { userRoutes } from './routes/users';
+import { locationRoutes } from './routes/locations';
+import { collectionRoutes } from './routes/collections';
 import { createBooksIndex } from './config/elasticsearch';
 import { syncAllBooks } from './services/searchService';
 
@@ -33,6 +36,9 @@ app.use('/library', libraryRoutes);
 app.use('/genres', genreRoutes);
 app.use('/images', imageRoutes);
 app.use('/search', searchRoutes);
+app.use('/users', userRoutes);
+app.use('/locations', locationRoutes);
+app.use('/collections', collectionRoutes);
 
 // Error handling
 app.use(errorHandler());

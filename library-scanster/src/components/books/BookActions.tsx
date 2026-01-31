@@ -11,9 +11,10 @@ interface BookActionsProps {
   book: Book;
   isInLibrary?: boolean;
   onLibraryStatusChange?: () => void;
+  onEditClick?: () => void;
 }
 
-export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange }: BookActionsProps) => {
+export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange, onEditClick }: BookActionsProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const { userId } = useAuth();
   const { toast } = useToast();
@@ -106,7 +107,7 @@ export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange }
     <div className="mt-8 flex flex-wrap gap-4 animate-slide-up" style={{ animationDelay: '250ms' }}>
       {isInLibrary ? (
         <>
-          <Button>Edit Details</Button>
+          <Button onClick={onEditClick}>Edit Details</Button>
           <Button variant="outline" onClick={handleRemoveFromLibrary} disabled={isLoading}>
             {isLoading ? "Processing..." : "Remove from Library"}
           </Button>

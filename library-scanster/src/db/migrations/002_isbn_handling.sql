@@ -15,13 +15,7 @@
 
 -- IMPORTANT: Update to RLS Policies
 -- The current user_books RLS policy requires the auth.uid() to match the user_id
--- Since we're using Clerk for authentication, we need to ensure the auth.uid matches
--- the user_id stored in the database
-
--- For production systems, implement either:
--- 1. A webhook from Clerk to Supabase to sync user IDs
--- 2. Custom JWT claims to pass the Clerk user ID to Supabase
--- 3. Or update the RLS policy to use auth.uid()::text = user_id OR auth.jwt()->>'sub' = user_id
+-- Ensure auth user_id matches between Supertokens sessions and the database
 
 -- Temporary solution: Drop and recreate the policy to be more permissive during development
 DROP POLICY IF EXISTS user_books_policy ON public.user_books;

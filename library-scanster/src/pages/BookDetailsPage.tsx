@@ -14,18 +14,27 @@ import { BookClassifications } from '@/components/books/BookClassifications';
 import { BookPublishPlaces } from '@/components/books/BookPublishPlaces';
 import { BookExcerpts } from '@/components/books/BookExcerpts';
 import { BookSecondaryActions } from '@/components/books/BookSecondaryActions';
-import { useQuery } from '@tanstack/react-query';
+import { BookImageGallery } from '@/components/books/BookImageGallery';
+import { BookEditor } from '@/components/scan/BookEditor';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserBooks, getBookByIdPublic } from '@/services/libraryService';
+import { updateBookDetails } from '@/services/bookOperations';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Book } from '@/types/book';
 
 const BookDetailsPage = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { userId, isSignedIn } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isInLibrary, setIsInLibrary] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   // Fetch user's books only if authenticated
   const { data: userBooks = [] } = useQuery({
@@ -54,6 +63,20 @@ const BookDetailsPage = () => {
       </PageLayout>
     );
   }
+
+  const handleEditSave = async (updatedBook: Book) => {
+    if (!book?.id) return;
+    try {
+      await updateBookDetails(book.id, updatedBook);
+      queryClient.invalidateQueries({ queryKey: ['book', id] });
+      queryClient.invalidateQueries({ queryKey: ['userBooks'] });
+      setIsEditOpen(false);
+      toast({ title: 'Book updated', description: 'Your changes have been saved' });
+    } catch (error) {
+      console.error('Error updating book:', error);
+      toast({ title: 'Update failed', description: 'Please try again', variant: 'destructive' });
+    }
+  };
 
   if (error || !book) {
     return (
@@ -87,7 +110,7 @@ const BookDetailsPage = () => {
                       In your collection
                     </div>
                   )}
-                  <BookActions book={book} isInLibrary={isInLibrary} />
+                  <BookActions book={book} isInLibrary={isInLibrary} onEditClick={() => setIsEditOpen(true)} />
                   <BookSecondaryActions />
                 </>
               ) : (
@@ -116,6 +139,12 @@ const BookDetailsPage = () => {
               </div>
             )}
 
+            {isSignedIn && isInLibrary && book.id && (
+              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-primary/10">
+                <BookImageGallery bookId={book.id} isbn={book.isbn} isOwner={isInLibrary} />
+              </div>
+            )}
+
             {book.subjects && book.subjects.length > 0 && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-primary/10">
                 <BookSubjects subjects={book.subjects} />
@@ -128,6 +157,15 @@ const BookDetailsPage = () => {
           </div>
         </div>
       </div>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Book Details</DialogTitle>
+          </DialogHeader>
+          <BookEditor book={book} onSave={handleEditSave} />
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 };

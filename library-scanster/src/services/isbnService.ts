@@ -1,13 +1,24 @@
 
 import { Book, Identifier, Publisher, Link, PublishPlace, BookExcerpt } from '@/types/book';
-import { normalizeIsbn } from '@/utils/isbnUtils';
+import { normalizeIsbn, isUpc, upcToIsbn13 } from '@/utils/isbnUtils';
 import { getOpenLibraryCoverUrl, processAndUploadImage } from '@/services/imageService';
 
 // Fetch book details by ISBN from Open Library API
 export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
   try {
-    const normalizedIsbn = normalizeIsbn(isbn);
-    
+    let normalizedIsbn = normalizeIsbn(isbn);
+    let originalUpc: string | undefined;
+
+    // If input is a UPC barcode, try converting to ISBN-13
+    if (isUpc(normalizedIsbn)) {
+      originalUpc = normalizedIsbn;
+      const converted = upcToIsbn13(normalizedIsbn);
+      if (converted) {
+        console.log(`Converted UPC ${normalizedIsbn} to ISBN-13 ${converted}`);
+        normalizedIsbn = converted;
+      }
+    }
+
     const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${normalizedIsbn}&format=json&jscmd=details`);
     
     if (!response.ok) {
@@ -18,6 +29,12 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
     const bookData = data[`ISBN:${normalizedIsbn}`];
     
     if (!bookData) {
+      // If we had a UPC, try searching OpenLibrary by UPC as a fallback
+      if (originalUpc) {
+        console.log(`ISBN lookup failed, trying UPC search for: ${originalUpc}`);
+        const upcResult = await fetchBookByUpcSearch(originalUpc);
+        if (upcResult) return upcResult;
+      }
       console.log(`No book found with ISBN: ${normalizedIsbn}`);
       return null;
     }
@@ -65,6 +82,12 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
         parseInt(bookData.details.number_of_pages, 10) : undefined
     };
     
+    // Store UPC in identifiers if we had one
+    if (originalUpc) {
+      if (!book.identifiers) book.identifiers = {};
+      book.identifiers.upc = [originalUpc];
+    }
+
     // If cover image from OpenLibrary exists, process it
     if (bookData.thumbnail_url || bookData.preview_url || normalizedIsbn) {
       try {
@@ -209,6 +232,37 @@ const processIdentifiers = (identifiers: any): Identifier | undefined => {
   } catch (error) {
     console.error('Error processing identifiers:', error);
     return undefined;
+  }
+};
+
+// Fallback: search OpenLibrary by UPC when ISBN conversion fails
+const fetchBookByUpcSearch = async (upc: string): Promise<Book | null> => {
+  try {
+    const response = await fetch(`https://openlibrary.org/search.json?q=${upc}&limit=1`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data.docs || data.docs.length === 0) return null;
+
+    const doc = data.docs[0];
+    const isbn = doc.isbn?.[0];
+
+    // If we found an ISBN from the search, do a full lookup
+    if (isbn) {
+      console.log(`UPC search found ISBN: ${isbn}, doing full lookup`);
+      // Temporarily clear the UPC flag to avoid infinite recursion
+      const result = await fetchBookByISBN(isbn);
+      if (result) {
+        if (!result.identifiers) result.identifiers = {};
+        result.identifiers.upc = [upc];
+        return result;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error in UPC search fallback:', error);
+    return null;
   }
 };
 

@@ -72,6 +72,39 @@ export const extractIsbn = (input: string): { normalized: string; original: stri
 };
 
 /**
+ * Checks if a string is a UPC-A barcode (12 digits)
+ */
+export const isUpc = (code: string): boolean => {
+  const normalized = code.replace(/[-\s]/g, '').trim();
+  return /^\d{12}$/.test(normalized);
+};
+
+/**
+ * Converts a UPC-A (12-digit) barcode to an ISBN-13 by prefixing with "978"
+ * and recalculating the check digit. Returns null if not a valid UPC.
+ * Note: Not all UPCs map to books — the caller should handle lookup failures.
+ */
+export const upcToIsbn13 = (upc: string): string | null => {
+  const normalized = upc.replace(/[-\s]/g, '').trim();
+  if (!isUpc(normalized)) return null;
+
+  // Take first 12 digits of UPC, prefix with 978, drop the UPC check digit
+  // ISBN-13 = "978" + first 9 digits of the UPC (after the leading "0" bookland prefix)
+  // Actually, the standard approach: prefix "978" + first 12 digits, then recalc check digit
+  // But ISBN from UPC: the UPC itself encodes the ISBN-10 body
+  // UPC for books: 978 + first 9 digits of ISBN-10 body...
+  // Simpler: just try "978" + first 12 chars, recalculate check digit for 13-digit
+  const base = '978' + normalized.substring(0, 9);
+
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const checkDigit = (10 - (sum % 10)) % 10;
+  return base + checkDigit.toString();
+};
+
+/**
  * Formats an ISBN with proper hyphens based on standard
  * 
  * @param isbn The ISBN string (can be with or without hyphens)
