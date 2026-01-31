@@ -130,3 +130,9 @@ dist
 .pnp.*
 .windsurfrules
 project_outline.md
+
+# IDE and AI tool configs
+.idea/
+.agent/
+.claude/
+.windsurf/
