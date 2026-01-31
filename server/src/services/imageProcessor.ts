@@ -6,6 +6,29 @@ const CDN_PATH = process.env.CDN_PATH || 'covers';
 const CDN_URL = process.env.CDN_URL || 'cdn.allmybooks.com';
 const CDN_API_KEY = process.env.CDN_API_KEY || '';
 
+/**
+ * Upload a buffer to Bunny CDN and return the public URL.
+ */
+export const uploadBufferToCDN = async (buffer: Buffer, filename: string): Promise<string> => {
+  const uploadUrl = `https://${CDN_REGION}.storage.bunnycdn.com/${CDN_STORAGE_ZONE}/${CDN_PATH}/${filename}`;
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      AccessKey: CDN_API_KEY,
+      'Content-Type': 'application/octet-stream',
+    },
+    body: buffer,
+  });
+
+  if (!uploadRes.ok) {
+    const errText = await uploadRes.text();
+    throw new Error(`CDN upload failed for ${filename}: ${uploadRes.status} - ${errText}`);
+  }
+
+  return `https://${CDN_URL}/${CDN_PATH}/${filename}`;
+};
+
 interface CoverUrls {
   cover_url: string;
   cover_small_url: string;
@@ -46,23 +69,7 @@ export const processAndUploadCover = async (
       .toBuffer();
 
     const filename = `${baseName}-${suffix}.webp`;
-    const uploadUrl = `https://${CDN_REGION}.storage.bunnycdn.com/${CDN_STORAGE_ZONE}/${CDN_PATH}/${filename}`;
-
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        AccessKey: CDN_API_KEY,
-        'Content-Type': 'application/octet-stream',
-      },
-      body: webpBuffer,
-    });
-
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text();
-      throw new Error(`CDN upload failed for ${filename}: ${uploadRes.status} - ${errText}`);
-    }
-
-    urls.push(`https://${CDN_URL}/${CDN_PATH}/${filename}`);
+    urls.push(await uploadBufferToCDN(webpBuffer, filename));
   }
 
   return {

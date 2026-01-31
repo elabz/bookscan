@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { pool } from '../config/db';
-import { processAndUploadCover } from '../services/imageProcessor';
+import { processAndUploadCover, uploadBufferToCDN } from '../services/imageProcessor';
+import sharp from 'sharp';
 
 /**
  * POST /images/process-cover
@@ -30,6 +31,52 @@ export const processCover = async (req: Request, res: Response) => {
   } catch (err) {
     console.error('Error processing cover:', err);
     return res.status(500).json({ error: 'Failed to process cover image' });
+  }
+};
+
+/**
+ * POST /images/upload
+ * Accepts a multipart file upload, processes to 3 sizes (WebP), uploads to Bunny CDN.
+ * Body (multipart): file, filename (optional)
+ * Returns { large, medium, small } CDN URLs.
+ */
+export const uploadImage = async (req: Request, res: Response) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const baseName = (req.body.filename as string) || `img-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const buffer = file.buffer;
+
+    const sizes = [
+      { suffix: 'L', width: 800 },
+      { suffix: 'M', width: 400 },
+      { suffix: 'S', width: 200 },
+    ] as const;
+
+    const urls: Record<string, string> = {};
+
+    for (const { suffix, width } of sizes) {
+      const webpBuffer = await sharp(buffer)
+        .resize(width, undefined, { withoutEnlargement: true })
+        .removeAlpha()
+        .webp({ quality: 85 })
+        .toBuffer();
+
+      const filename = `${baseName}-${suffix}.webp`;
+      urls[suffix] = await uploadBufferToCDN(webpBuffer, filename);
+    }
+
+    return res.json({
+      large: urls['L'],
+      medium: urls['M'],
+      small: urls['S'],
+    });
+  } catch (err) {
+    console.error('Error uploading image:', err);
+    return res.status(500).json({ error: 'Failed to upload image' });
   }
 };
 

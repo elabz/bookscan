@@ -24,7 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Book } from '@/types/book';
 
 const BookDetailsPage = () => {
@@ -162,6 +162,7 @@ const BookDetailsPage = () => {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Book Details</DialogTitle>
+            <DialogDescription>Update the book's metadata, cover image, and other details.</DialogDescription>
           </DialogHeader>
           <BookEditor book={book} onSave={handleEditSave} />
         </DialogContent>

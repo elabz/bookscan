@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import Cropper, { Area } from 'react-easy-crop';
 import { Button } from '@/components/ui/button';
-import { processAndUploadImage } from '@/services/imageService';
+import { uploadImageViaBackend } from '@/services/cdnService';
 import { fetchImageAsBlob, rotateImage } from '@/services/imageUtils';
-import { addBookImage, setImageAsCover as setImageAsCoverApi } from '@/services/bookImageService';
+import { addBookImage } from '@/services/bookImageService';
 import { BookImage } from '@/types/book';
 import { RotateCw, RotateCcw, Crop, Upload, Sparkles, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -92,9 +92,11 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
     if (!imageBlob) return;
     setIsProcessing(true);
     try {
+      // Upload via backend (processes to 3 sizes, uploads to CDN)
       const filename = isbn || `book-${bookId}-${Date.now()}`;
-      const urls = await processAndUploadImage(imageBlob, filename);
+      const urls = await uploadImageViaBackend(imageBlob, filename);
 
+      // Save metadata to book_images table
       const image = await addBookImage(bookId, {
         url: urls.medium,
         url_small: urls.small,
@@ -107,7 +109,8 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
       setImageBlob(null);
       toast({ title: asCover ? 'Cover image set' : 'Image added' });
     } catch (err) {
-      toast({ title: 'Upload failed', variant: 'destructive' });
+      console.error('Upload error:', err);
+      toast({ title: 'Upload failed', description: 'Please try again', variant: 'destructive' });
     } finally {
       setIsProcessing(false);
     }

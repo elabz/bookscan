@@ -1,44 +1,61 @@
-
 /**
- * Service for interacting with the CDN
+ * Service for uploading images via the backend (which proxies to CDN).
+ * The CDN API key is kept server-side only.
  */
 
-// Get environment variables with fallbacks
-const CDN_STORAGE_ZONE_NAME = import.meta.env.VITE_CDN_STORAGE_ZONE_NAME || 'allmybooks';
-const CDN_REGION = import.meta.env.VITE_CDN_REGION || 'ny';
-const CDN_PATH = import.meta.env.VITE_CDN_PATH || 'covers';
-const CDN_URL = import.meta.env.VITE_CDN_URL || 'cdn.allmybooks.com';
-const CDN_API_KEY = import.meta.env.VITE_CDN_API_KEY || '';
+const API_BASE = '/api';
 
 /**
- * Uploads an image to the Bunny.net CDN
+ * Uploads an image blob to the CDN via the backend proxy.
+ * The backend processes (resize, WebP convert) and uploads to Bunny CDN.
  */
 export const uploadImageToCDN = async (imageBlob: Blob, filename: string): Promise<string> => {
-  try {
-    // Construct the upload URL with region
-    const uploadUrl = `https://${CDN_REGION}.storage.bunnycdn.com/${CDN_STORAGE_ZONE_NAME}/${CDN_PATH}/${filename}`;
-    
-    // Upload the image to Bunny.net CDN
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'AccessKey': CDN_API_KEY,
-        'Content-Type': 'application/octet-stream'
-      },
-      body: imageBlob
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to upload to CDN: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-    
-    // Construct and return the CDN URL for the uploaded image
-    const cdnUrl = `https://${CDN_URL}/${CDN_PATH}/${filename}`;
-    console.log(`Image uploaded successfully to CDN: ${cdnUrl}`);
-    return cdnUrl;
-  } catch (error) {
-    console.error('Error uploading to CDN:', error);
-    throw error;
+  // This is kept for backward compat with imageService.ts which calls it per-size.
+  // But now we just return a data URL so processAndUploadImage can collect blobs,
+  // or we upload directly. For the new flow, use uploadImageViaBackend instead.
+  const formData = new FormData();
+  formData.append('file', imageBlob, filename);
+  formData.append('filename', filename.replace(/\.[^.]+$/, '')); // strip extension, backend adds .webp
+
+  const res = await fetch(`${API_BASE}/images/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to upload image: ${res.status} - ${errorText}`);
   }
+
+  // The backend returns { large, medium, small } but this function is called per-size
+  // from the old imageService flow. Return the medium URL as a sensible default.
+  const data = await res.json();
+  return data.medium;
+};
+
+/**
+ * Uploads a single image blob to the backend, which processes it into 3 sizes
+ * and uploads all to CDN. Returns { large, medium, small } URLs.
+ */
+export const uploadImageViaBackend = async (
+  imageBlob: Blob,
+  filename: string
+): Promise<{ large: string; medium: string; small: string }> => {
+  const formData = new FormData();
+  formData.append('file', imageBlob, 'image.jpg');
+  formData.append('filename', filename);
+
+  const res = await fetch(`${API_BASE}/images/upload`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Failed to upload image: ${res.status} - ${errorText}`);
+  }
+
+  return res.json();
 };
