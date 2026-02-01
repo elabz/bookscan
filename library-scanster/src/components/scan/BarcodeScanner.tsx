@@ -15,7 +15,7 @@ import {
   getCameraErrorMessage,
   isCameraSupported
 } from './CameraErrorHandler';
-import { isValidIsbn } from '@/utils/isbnUtils';
+
 
 interface BarcodeScannerProps {
   onScanComplete?: (isbn: string) => void;
@@ -66,32 +66,19 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     setIsScanning(false);
     setIsCameraReady(false);
 
-    // Convert to ISBN only if we can confirm it's a book barcode.
-    // NEVER pad or modify the code unless the result is a valid ISBN-13.
-    let isbn = rawCode;
-
-    if (isValidIsbn(rawCode)) {
-      // Already a valid ISBN-10 or ISBN-13 — use as-is
-      isbn = rawCode;
-    } else if (rawCode.length === 12 && (rawCode.startsWith('78') || rawCode.startsWith('79'))) {
-      // UPC reader dropped leading "9" from ISBN-13: 9780... → 780...
-      const recovered = '9' + rawCode;
-      if (isValidIsbn(recovered)) {
-        isbn = recovered;
-      }
-    }
-    // For any other code (regular UPC, EAN-8, etc.), pass as-is — no padding.
-    // The ISBN service will handle lookup by UPC if needed.
-
-    console.log(`Scan result: raw=${rawCode}, isbn=${isbn}`);
+    // Pass the raw scanned code to the search handler as-is.
+    // The ISBN service handles UPC→ISBN conversion, and passing the raw code
+    // ensures BookNotFoundMessage can correctly identify UPC barcodes and
+    // prompt the user to type in the ISBN manually.
+    console.log(`Scan result: ${rawCode}`);
 
     toast({
       title: "Barcode Detected",
-      description: `ISBN: ${isbn}`,
+      description: `Code: ${rawCode}`,
     });
 
     if (onScanComplete) {
-      onScanComplete(isbn);
+      onScanComplete(rawCode);
     }
   };
 
