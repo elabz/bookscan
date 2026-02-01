@@ -9,7 +9,7 @@ import { LibraryStats } from '@/components/library/LibraryStats';
 import { LibraryFilters } from '@/components/library/LibraryFilters';
 import { Button } from '@/components/ui/button';
 import { Book as BookType } from '@/types/book';
-import { BookPlus, Settings2 } from 'lucide-react';
+import { BookPlus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +23,6 @@ const LibraryPage = () => {
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
-  const [showManageSection, setShowManageSection] = useState(false);
   const { userId, isSignedIn } = useAuth();
   const { toast } = useToast();
 
@@ -69,28 +68,23 @@ const LibraryPage = () => {
         variant: "destructive"
       });
     }
-  }, [booksError, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [booksError]);
 
   // Use separate state for filtered books during search
   const [filteredBooks, setFilteredBooks] = useState<BookType[]>([]);
-  const [displayedBooks, setDisplayedBooks] = useState<BookType[]>([]);
 
-  // When not searching, display all books from the query result
-  useEffect(() => {
-    if (isSearching) {
-      setDisplayedBooks(filteredBooks);
-    } else {
-      setDisplayedBooks(books);
-    }
+  // Derive displayed books from state without extra setState calls
+  const displayedBooks = React.useMemo(() => {
+    let result = isSearching ? filteredBooks : books;
 
-    // Apply genre filter if any are selected
     if (selectedGenres.length > 0) {
-      setDisplayedBooks(current =>
-        current.filter(book =>
-          book.genres?.some(genre => selectedGenres.includes(genre.id))
-        )
+      result = result.filter(book =>
+        book.genres?.some(genre => selectedGenres.includes(genre.id))
       );
     }
+
+    return result;
   }, [books, filteredBooks, isSearching, selectedGenres]);
 
   const handleSearch = async (query: string) => {

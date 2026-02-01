@@ -60,6 +60,7 @@ export const dbBookToAppFormat = (book: any, genres?: Genre[]): Book => {
     publish_places: book.publish_places,
     excerpts: book.excerpts,
     number_of_pages: book.number_of_pages,
+    location_id: book.location_id || null,
     createdAt: book.created_at,
     updatedAt: book.updated_at,
   };

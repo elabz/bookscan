@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut } from 'lucide-react';
+import { User, LogOut, Library } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
@@ -38,6 +38,11 @@ export const UserMenu = ({ userEmail, signOut }: UserMenuProps) => {
           <User className="mr-2 h-4 w-4" />
           Profile
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate('/library-setup')}>
+          <Library className="mr-2 h-4 w-4" />
+          Library Setup
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
           Log out

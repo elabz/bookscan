@@ -5,6 +5,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { fetchBookByISBN } from '@/services/isbnService';
 import { addBook } from '@/services/bookService';
+import { updateBookLocation } from '@/services/locationService';
 import { useAuth } from '@/hooks/useAuth';
 import { Book } from '@/types/book';
 
@@ -16,6 +17,8 @@ import { BookEditor } from '@/components/scan/BookEditor';
 import { BookNotFoundMessage } from '@/components/scan/BookNotFoundMessage';
 import { ScanPageHeader, ScanPageFooter } from '@/components/scan/ScanPageHeader';
 
+const LOCATION_STORAGE_KEY = 'addBook_selectedLocationId';
+
 const ScanPage = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -26,6 +29,18 @@ const ScanPage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [lastScannedIsbn, setLastScannedIsbn] = useState<string>("");
   const [isBookNotFound, setIsBookNotFound] = useState(false);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() =>
+    sessionStorage.getItem(LOCATION_STORAGE_KEY) || null
+  );
+
+  const handleLocationChange = (locId: string | null) => {
+    setSelectedLocationId(locId);
+    if (locId) {
+      sessionStorage.setItem(LOCATION_STORAGE_KEY, locId);
+    } else {
+      sessionStorage.removeItem(LOCATION_STORAGE_KEY);
+    }
+  };
   
   const resetScanState = () => {
     setFoundBook(null);
@@ -33,22 +48,22 @@ const ScanPage = () => {
     setLastScannedIsbn("");
   };
 
-  const handleIsbnSearch = async (isbn: string) => {
+  const handleIsbnSearch = async (isbn: string, upc?: string) => {
     if (!isbn) return;
-    
+
     setIsSearching(true);
     setFoundBook(null);
     setIsBookNotFound(false);
     setLastScannedIsbn(isbn);
-    
+
     try {
       toast({
         title: "Searching...",
         description: `Looking up ISBN: ${isbn}`,
       });
-      
-      // Pass the raw ISBN - the service will handle normalization
-      const bookData = await fetchBookByISBN(isbn);
+
+      // Pass the raw ISBN and optional UPC (from manual entry after UPC scan)
+      const bookData = await fetchBookByISBN(isbn, upc);
       
       if (bookData) {
         setFoundBook(bookData);
@@ -101,9 +116,15 @@ const ScanPage = () => {
     
     try {
       console.log('Adding book to library with userId:', userId);
-      // Ensure userId is passed as a string
       const addedBook = await addBook(foundBook, userId);
-      
+
+      // Set location if one is selected
+      if (selectedLocationId && addedBook.id) {
+        await updateBookLocation(addedBook.id, selectedLocationId).catch((err) =>
+          console.error('Failed to set book location:', err)
+        );
+      }
+
       toast({
         title: "Success!",
         description: `"${addedBook.title}" has been added to your library`,
@@ -139,8 +160,9 @@ const ScanPage = () => {
         )}
         
         {isBookNotFound && (
-          <BookNotFoundMessage 
+          <BookNotFoundMessage
             onRescan={resetScanState}
+            onIsbnSubmit={(manualIsbn) => handleIsbnSearch(manualIsbn, lastScannedIsbn)}
             isbnScanned={lastScannedIsbn}
           />
         )}
@@ -168,6 +190,8 @@ const ScanPage = () => {
             onAddToLibrary={handleAddToLibrary}
             onEditBook={() => setIsEditing(true)}
             isAddingToLibrary={isAddingToLibrary}
+            selectedLocationId={selectedLocationId}
+            onLocationChange={handleLocationChange}
           />
         )}
         

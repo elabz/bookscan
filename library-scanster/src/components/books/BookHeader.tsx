@@ -19,7 +19,7 @@ export const BookHeader = ({ book }: BookHeaderProps) => {
         variant="ghost" 
         size="sm" 
         className="mb-6" 
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/library')}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back

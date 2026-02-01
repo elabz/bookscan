@@ -1,6 +1,6 @@
 
 import Quagga from 'quagga';
-import { isValidIsbn } from '@/utils/isbnUtils';
+import { isValidIsbn, isValidUpc, isValidEan } from '@/utils/isbnUtils';
 
 interface QuaggaInitOptions {
   targetElement: HTMLDivElement;
@@ -20,10 +20,9 @@ export const initQuaggaScanner = ({
   onInitSuccess
 }: QuaggaInitOptions): void => {
   try {
-    // Configure based on orientation/device type
     const width = isMobile ? { min: 360, ideal: 720, max: 1280 } : { min: 640, ideal: 1280, max: 1920 };
     const height = isMobile ? { min: 640, ideal: 1280, max: 1920 } : { min: 480, ideal: 720, max: 1080 };
-    
+
     console.log(`Initializing Quagga with resolution: ${JSON.stringify({ width, height })}, isMobile: ${isMobile}`);
 
     Quagga.init(
@@ -37,8 +36,8 @@ export const initQuaggaScanner = ({
             height,
             facingMode: "environment",
           },
-          area: null, // Remove area restriction to fix field of view issues
-          singleChannel: false 
+          area: null,
+          singleChannel: false
         },
         locator: {
           patchSize: "medium",
@@ -47,13 +46,12 @@ export const initQuaggaScanner = ({
         numOfWorkers: 2,
         frequency: 10,
         decoder: {
+          // Only book-relevant readers — Code39/Code128 cause too many false positives
           readers: [
-            "ean_reader",
-            "ean_8_reader",
-            "upc_reader",
-            "upc_e_reader",
-            "code_39_reader",
-            "code_128_reader"
+            "ean_reader",      // EAN-13 (includes ISBN-13)
+            "ean_8_reader",    // EAN-8
+            "upc_reader",      // UPC-A (12 digits)
+            "upc_e_reader"     // UPC-E (compact UPC)
           ],
           multiple: false
         },
@@ -73,8 +71,22 @@ export const initQuaggaScanner = ({
         Quagga.onDetected((result) => {
           const code = result.codeResult.code;
           if (!code) return;
-          
-          console.log("Detected code:", code);
+
+          // Check result confidence — Quagga provides error correction info
+          // Filter out low-confidence results to reduce false positives
+          const errors = result.codeResult.decodedCodes
+            ?.filter((d: any) => d.error !== undefined)
+            .map((d: any) => d.error) || [];
+          const avgError = errors.length > 0
+            ? errors.reduce((sum: number, e: number) => sum + e, 0) / errors.length
+            : 1;
+
+          if (avgError > 0.08) {
+            console.log(`Low confidence scan rejected: ${code} (error: ${avgError.toFixed(3)})`);
+            return;
+          }
+
+          console.log(`Detected code: ${code} (error: ${avgError.toFixed(3)}, format: ${result.codeResult.format})`);
           onDetected(code);
         });
 
@@ -93,28 +105,41 @@ export const stopQuaggaScanner = (): void => {
   Quagga.stop();
 };
 
+/**
+ * Validates a barcode detection. Requires the same code to be seen
+ * at least MIN_CONSENSUS times in the recent scan history to reduce
+ * false positives from single-frame misreads.
+ */
+const MIN_CONSENSUS = 3;
+
 export const validateDetection = (
-  code: string, 
+  code: string,
   scannedCodes: string[]
 ): boolean => {
-  // Check if the code is a valid ISBN
-  if (code && code.length >= 10 && code.length <= 13) {
-    // Try the direct validation first
-    if (isValidIsbn(code)) {
-      return true;
-    }
-    
-    // Handle common scanning errors like missing leading zeros
-    if (code.length === 12 && code.startsWith('978')) {
-      // Try to fix a 12-digit code by adding a zero at the end (common ISBN-13 error)
-      const fixedCode = code + '0';
-      if (isValidIsbn(fixedCode)) {
-        return true;
-      }
-    }
-    
-    // Add other specific scanning error corrections as needed
+  if (!code || code.length < 8 || code.length > 13) return false;
+
+  // Check consensus: same code seen MIN_CONSENSUS times (including this detection)
+  const count = scannedCodes.filter(c => c === code).length;
+  const hasConsensus = count >= MIN_CONSENSUS - 1;
+
+  if (!hasConsensus) return false;
+
+  // Accept codes with valid checksums — the ISBN service handles UPC→book lookup
+
+  // Valid ISBN-10 or ISBN-13 (978/979 prefix + valid checksum)
+  if (isValidIsbn(code)) return true;
+
+  // UPC reader may drop leading "9" from ISBN-13: 9780... → 780...
+  if (code.length === 12 && (code.startsWith('78') || code.startsWith('79'))) {
+    if (isValidIsbn('9' + code)) return true;
   }
+
+  // Valid UPC-A with checksum — older books use retail UPC barcodes instead of Bookland EAN
+  if (code.length === 12 && isValidUpc(code)) return true;
+
+  // Valid EAN-13 with checksum — some books use non-978/979 EAN (e.g., UPC read as EAN with leading 0)
+  if (code.length === 13 && isValidEan(code)) return true;
+
   return false;
 };
 

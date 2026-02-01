@@ -18,6 +18,7 @@ import SignUpPage from "./pages/SignUpPage";
 import AuthCallbackPage from "./pages/AuthCallbackPage";
 import DiscoverPage from "./pages/DiscoverPage";
 import ProfilePage from "./pages/ProfilePage";
+import LibrarySetupPage from "./pages/LibrarySetupPage";
 
 const App = () => (
   <TooltipProvider>
@@ -40,6 +41,11 @@ const App = () => (
         <Route path="/profile" element={
           <RequireAuth>
             <ProfilePage />
+          </RequireAuth>
+        } />
+        <Route path="/library-setup" element={
+          <RequireAuth>
+            <LibrarySetupPage />
           </RequireAuth>
         } />
         <Route path="/books/:id" element={<BookDetailsPage />} />

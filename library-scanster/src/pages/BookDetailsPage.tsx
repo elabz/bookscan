@@ -26,6 +26,8 @@ import { LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Book } from '@/types/book';
+import { LocationPicker } from '@/components/library/LocationPicker';
+import { updateBookLocation } from '@/services/locationService';
 
 const BookDetailsPage = () => {
   const { id = '' } = useParams<{ id: string }>();
@@ -35,6 +37,7 @@ const BookDetailsPage = () => {
   const queryClient = useQueryClient();
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [bookLocationId, setBookLocationId] = useState<string | null>(null);
 
   // Fetch user's books only if authenticated
   const { data: userBooks = [] } = useQuery({
@@ -52,7 +55,9 @@ const BookDetailsPage = () => {
 
   useEffect(() => {
     if (book && userBooks.length > 0) {
-      setIsInLibrary(userBooks.some(ub => ub.id === book.id));
+      const userBook = userBooks.find(ub => ub.id === book.id);
+      setIsInLibrary(!!userBook);
+      if (userBook) setBookLocationId(userBook.location_id || null);
     }
   }, [book, userBooks]);
 
@@ -109,6 +114,20 @@ const BookDetailsPage = () => {
                       <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
                       In your collection
                     </div>
+                  )}
+                  {isInLibrary && book.id && (
+                    <LocationPicker
+                      value={bookLocationId}
+                      onChange={async (locId) => {
+                        setBookLocationId(locId);
+                        try {
+                          await updateBookLocation(book.id!, locId);
+                          toast({ title: locId ? 'Location updated' : 'Location removed' });
+                        } catch {
+                          toast({ title: 'Failed to update location', variant: 'destructive' });
+                        }
+                      }}
+                    />
                   )}
                   <BookActions book={book} isInLibrary={isInLibrary} onEditClick={() => setIsEditOpen(true)} />
                   <BookSecondaryActions />

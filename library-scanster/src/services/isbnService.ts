@@ -2,21 +2,53 @@
 import { Book, Identifier, Publisher, Link, PublishPlace, BookExcerpt } from '@/types/book';
 import { normalizeIsbn, isUpc, upcToIsbn13 } from '@/utils/isbnUtils';
 import { getOpenLibraryCoverUrl, processAndUploadImage } from '@/services/imageService';
+import { dbBookToAppFormat } from '@/services/converters';
+
+// Check local database first by ISBN or UPC
+const lookupLocalBook = async (code: string): Promise<Book | null> => {
+  try {
+    const res = await fetch(`/api/library/lookup?code=${encodeURIComponent(code)}`, {
+      credentials: 'include',
+    });
+    if (!res.ok) return null;
+    const row = await res.json();
+    return dbBookToAppFormat(row);
+  } catch {
+    return null;
+  }
+};
 
 // Fetch book details by ISBN from Open Library API
-export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
+// Optional detectedUpc: when user manually enters ISBN after a UPC scan, attach the UPC
+export const fetchBookByISBN = async (isbn: string, detectedUpc?: string): Promise<Book | null> => {
   try {
-    let normalizedIsbn = normalizeIsbn(isbn);
-    let originalUpc: string | undefined;
+    // Always check local database first
+    const localBook = await lookupLocalBook(isbn);
+    if (localBook) {
+      console.log(`Found book in local DB for code: ${isbn}`);
+      return localBook;
+    }
 
-    // If input is a UPC barcode, try converting to ISBN-13
+    let normalizedIsbn = normalizeIsbn(isbn);
+    // detectedUpc may come from the caller (manual ISBN after UPC scan) or be detected here
+    let upcCode: string | undefined = detectedUpc;
+
+    // If input is a UPC barcode (12 digits), try converting to ISBN-13
     if (isUpc(normalizedIsbn)) {
-      originalUpc = normalizedIsbn;
+      upcCode = normalizedIsbn;
       const converted = upcToIsbn13(normalizedIsbn);
       if (converted) {
         console.log(`Converted UPC ${normalizedIsbn} to ISBN-13 ${converted}`);
         normalizedIsbn = converted;
       }
+    }
+
+    // EAN-13 starting with "0" is a UPC-A with implicit leading zero.
+    // The actual UPC is the last 12 digits. Not an ISBN — needs UPC lookup.
+    if (normalizedIsbn.length === 13 && normalizedIsbn.startsWith('0')
+        && !normalizedIsbn.startsWith('097')) {
+      upcCode = normalizedIsbn.slice(1); // strip leading 0 to get 12-digit UPC
+      console.log(`EAN-13 with leading 0 detected, extracted UPC: ${upcCode}`);
     }
 
     const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${normalizedIsbn}&format=json&jscmd=details`);
@@ -30,9 +62,9 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
     
     if (!bookData) {
       // If we had a UPC, try searching OpenLibrary by UPC as a fallback
-      if (originalUpc) {
-        console.log(`ISBN lookup failed, trying UPC search for: ${originalUpc}`);
-        const upcResult = await fetchBookByUpcSearch(originalUpc);
+      if (upcCode) {
+        console.log(`ISBN lookup failed, trying UPC search for: ${upcCode}`);
+        const upcResult = await fetchBookByUpcSearch(upcCode);
         if (upcResult) return upcResult;
       }
       console.log(`No book found with ISBN: ${normalizedIsbn}`);
@@ -57,7 +89,7 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
     const book: Book = {
       title: bookData.details?.title || 'Unknown Title',
       authors: extractAuthors(bookData.details),
-      isbn: extractMainIsbn(bookData.details?.identifiers) || isbn,
+      isbn: extractMainIsbn(bookData.details?.identifiers, bookData.details) || isbn,
       publisher: extractPublisher(bookData.details),
       publishers: extractPublishers(bookData.details),
       publishedDate: bookData.details?.publish_date,
@@ -68,7 +100,7 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
       language: bookData.details?.languages?.[0]?.key?.split('/')?.[2] || undefined,
       
       // Map all additional fields
-      identifiers: processIdentifiers(bookData.details?.identifiers),
+      identifiers: processIdentifiers(bookData.details?.identifiers, bookData.details),
       classifications: bookData.details?.classifications,
       links: processLinks(bookData.details?.links),
       weight: bookData.details?.weight,
@@ -83,9 +115,9 @@ export const fetchBookByISBN = async (isbn: string): Promise<Book | null> => {
     };
     
     // Store UPC in identifiers if we had one
-    if (originalUpc) {
+    if (upcCode) {
       if (!book.identifiers) book.identifiers = {};
-      book.identifiers.upc = [originalUpc];
+      book.identifiers.upc = [upcCode];
     }
 
     // If cover image from OpenLibrary exists, process it
@@ -214,21 +246,30 @@ const processExcerpts = (excerpts: any): BookExcerpt[] | undefined => {
 };
 
 // Helper function to process identifiers
-const processIdentifiers = (identifiers: any): Identifier | undefined => {
-  if (!identifiers || Object.keys(identifiers).length === 0) return undefined;
-  
+// OpenLibrary puts isbn_10/isbn_13 at the top level of details, not inside identifiers
+const processIdentifiers = (identifiers: any, details?: any): Identifier | undefined => {
   try {
     const result: Identifier = {};
-    
-    Object.entries(identifiers).forEach(([key, values]) => {
-      if (Array.isArray(values)) {
-        result[key] = values;
-      } else if (values) {
-        result[key] = [values.toString()];
-      }
-    });
-    
-    return result;
+
+    if (identifiers && Object.keys(identifiers).length > 0) {
+      Object.entries(identifiers).forEach(([key, values]) => {
+        if (Array.isArray(values)) {
+          result[key] = values;
+        } else if (values) {
+          result[key] = [values.toString()];
+        }
+      });
+    }
+
+    // Merge top-level isbn_10 / isbn_13 from details (OpenLibrary puts them there)
+    if (details?.isbn_10 && !result.isbn_10) {
+      result.isbn_10 = Array.isArray(details.isbn_10) ? details.isbn_10 : [details.isbn_10];
+    }
+    if (details?.isbn_13 && !result.isbn_13) {
+      result.isbn_13 = Array.isArray(details.isbn_13) ? details.isbn_13 : [details.isbn_13];
+    }
+
+    return Object.keys(result).length > 0 ? result : undefined;
   } catch (error) {
     console.error('Error processing identifiers:', error);
     return undefined;
@@ -266,20 +307,22 @@ const fetchBookByUpcSearch = async (upc: string): Promise<Book | null> => {
   }
 };
 
-// Helper function to extract the main ISBN from identifiers
-const extractMainIsbn = (identifiers?: any): string | undefined => {
-  if (!identifiers) return undefined;
-  
+// Helper function to extract the main ISBN from identifiers and top-level details
+const extractMainIsbn = (identifiers?: any, details?: any): string | undefined => {
   try {
-    // Prefer ISBN-13 over ISBN-10
-    if (identifiers.isbn_13 && (Array.isArray(identifiers.isbn_13) ? identifiers.isbn_13.length > 0 : identifiers.isbn_13)) {
-      return Array.isArray(identifiers.isbn_13) ? identifiers.isbn_13[0] : identifiers.isbn_13.toString();
+    // Check identifiers object first
+    const sources = [identifiers, details].filter(Boolean);
+    for (const src of sources) {
+      // Prefer ISBN-13 over ISBN-10
+      if (src?.isbn_13) {
+        const val = Array.isArray(src.isbn_13) ? src.isbn_13[0] : src.isbn_13.toString();
+        if (val) return val;
+      }
+      if (src?.isbn_10) {
+        const val = Array.isArray(src.isbn_10) ? src.isbn_10[0] : src.isbn_10.toString();
+        if (val) return val;
+      }
     }
-    
-    if (identifiers.isbn_10 && (Array.isArray(identifiers.isbn_10) ? identifiers.isbn_10.length > 0 : identifiers.isbn_10)) {
-      return Array.isArray(identifiers.isbn_10) ? identifiers.isbn_10[0] : identifiers.isbn_10.toString();
-    }
-    
     return undefined;
   } catch (error) {
     console.error('Error extracting main ISBN:', error);

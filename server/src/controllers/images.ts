@@ -49,6 +49,7 @@ export const uploadImage = async (req: Request, res: Response) => {
 
     const baseName = (req.body.filename as string) || `img-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     const buffer = file.buffer;
+    console.log('[uploadImage] filename:', baseName, 'size:', buffer.length);
 
     const sizes = [
       { suffix: 'L', width: 800 },

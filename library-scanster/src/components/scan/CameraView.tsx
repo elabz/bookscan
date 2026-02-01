@@ -16,9 +16,28 @@ export const CameraView: React.FC<CameraViewProps> = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [viewHeight, setViewHeight] = useState<number>(0);
+
+  // Calculate available height: viewport minus top offset minus button bar
+  // Also cap so it doesn't exceed available width (for landscape cameras)
+  useEffect(() => {
+    const calculate = () => {
+      const top = containerRef.current?.getBoundingClientRect().top ?? 200;
+      const containerWidth = containerRef.current?.clientWidth ?? window.innerWidth;
+      // Leave 70px for the button bar below the video
+      const availableHeight = window.innerHeight - top - 70;
+      // Don't let the camera view be taller than the container width
+      const maxHeight = Math.min(availableHeight, containerWidth);
+      setViewHeight(Math.max(200, maxHeight));
+    };
+    calculate();
+    window.addEventListener('resize', calculate);
+    return () => window.removeEventListener('resize', calculate);
+  }, []);
 
   useEffect(() => {
     initializeCamera();
@@ -32,17 +51,18 @@ export const CameraView: React.FC<CameraViewProps> = ({
   const initializeCamera = async () => {
     try {
       setErrorMessage(null);
+      // Request max resolution — let the browser/device decide the best it can do
       const constraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: isMobile ? 720 : 1280 },
-          height: { ideal: isMobile ? 1280 : 720 }
+          width: { ideal: 4096 },
+          height: { ideal: 4096 }
         }
       };
-      
+
       const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
@@ -57,24 +77,20 @@ export const CameraView: React.FC<CameraViewProps> = ({
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
-    
+
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    
-    // Set canvas dimensions to match video
+
+    // Capture at full camera resolution
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    
-    // Draw the current video frame onto the canvas
+
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      
-      // Convert to data URL
-      const dataUrl = canvas.toDataURL('image/jpeg');
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
       onPhotoCapture(dataUrl);
-      
-      // Stop camera stream
+
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -82,27 +98,23 @@ export const CameraView: React.FC<CameraViewProps> = ({
   };
 
   const handleRetry = () => {
-    // Stop any existing stream
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
-    
-    // Re-initialize camera
     initializeCamera();
   };
 
   return (
-    <div className="relative bg-black rounded-lg overflow-hidden">
-      <div className="aspect-video relative">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          className="w-full h-full object-cover"
+    <div ref={containerRef} className="relative bg-black rounded-lg overflow-hidden flex flex-col">
+      <div className="relative" style={{ height: viewHeight > 0 ? `${viewHeight}px` : '70vh' }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className="w-full h-full object-contain"
         />
         <canvas ref={canvasRef} className="hidden" />
-        
-        {/* Camera interface overlay */}
+
         {errorMessage && (
           <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/80 p-4">
             <div className="text-center">
@@ -114,25 +126,17 @@ export const CameraView: React.FC<CameraViewProps> = ({
             </div>
           </div>
         )}
-        
+
         {!isCameraReady && !errorMessage && (
           <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/50">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
             <p className="absolute mt-20 text-white font-medium">Initializing camera...</p>
           </div>
         )}
-        
-        <div className="absolute inset-0 z-10 flex items-center justify-center">
-          {/* Scanner guide */}
-          <div className={`
-            absolute z-10 border-2 border-primary/50 border-dashed rounded-md animate-pulse
-            ${isMobile ? 'inset-x-[15%] inset-y-[30%]' : 'inset-x-[30%] inset-y-[15%]'}
-          `}></div>
-        </div>
       </div>
-      
-      <div className="p-4 bg-card">
-        <div className="flex justify-between">
+
+      <div className="p-3 bg-card flex-shrink-0">
+        <div className="flex justify-between items-center">
           <Button variant="outline" onClick={onCancel}>Cancel</Button>
           <Button onClick={capturePhoto} disabled={!isCameraReady}>
             <Camera className="mr-2 h-4 w-4" />

@@ -97,6 +97,7 @@ export const ScanTab: React.FC<ScanTabProps> = (props) => {
       {isBookNotFound && (
         <BookNotFoundMessage
           onRescan={resetScanState}
+          onIsbnSubmit={handleScan}
           isbnScanned={lastScannedIsbn}
         />
       )}

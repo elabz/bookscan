@@ -5,32 +5,35 @@ import { Input } from '@/components/ui/input';
 import { BookIcon, Camera, Upload } from 'lucide-react';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { processImageFromFile } from '@/services/imageService';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface BookCoverEditorProps {
   isbn: string;
+  bookId?: string;
   coverUrls: {
     coverUrl: string;
     coverSmallUrl: string;
     coverLargeUrl: string;
   };
   isUploading: boolean;
-  onCoverChange: (coverUrls: { 
-    coverUrl: string; 
-    coverSmallUrl: string; 
-    coverLargeUrl: string; 
+  onCoverChange: (coverUrls: {
+    coverUrl: string;
+    coverSmallUrl: string;
+    coverLargeUrl: string;
   }) => void;
   setIsUploading: (isUploading: boolean) => void;
 }
 
 export const BookCoverEditor: React.FC<BookCoverEditorProps> = ({
   isbn,
+  bookId,
   coverUrls,
   isUploading,
   onCoverChange,
   setIsUploading
 }) => {
   const navigate = useNavigate();
+  const routerLocation = useLocation();
   const { coverUrl } = coverUrls;
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,11 +58,12 @@ export const BookCoverEditor: React.FC<BookCoverEditorProps> = ({
   };
 
   const handleTakePhoto = () => {
-    navigate('/take-photo', { 
-      state: { 
+    navigate('/take-photo', {
+      state: {
         isbn,
-        returnPath: location.pathname 
-      } 
+        bookId,
+        returnPath: routerLocation.pathname,
+      },
     });
   };
 

@@ -5,16 +5,17 @@ import { Scan, X } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { BarcodeScannerUI } from './BarcodeScannerUI';
-import { 
-  initQuaggaScanner, 
-  stopQuaggaScanner, 
+import {
+  initQuaggaScanner,
+  stopQuaggaScanner,
   validateDetection,
   checkVideoStream
 } from './QuaggaScanner';
-import { 
+import {
   getCameraErrorMessage,
   isCameraSupported
 } from './CameraErrorHandler';
+import { isValidIsbn } from '@/utils/isbnUtils';
 
 interface BarcodeScannerProps {
   onScanComplete?: (isbn: string) => void;
@@ -26,10 +27,13 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [showRetry, setShowRetry] = useState(false);
   const scannerRef = useRef<HTMLDivElement>(null);
-  const [scannedCodes, setScannedCodes] = useState<string[]>([]);
   const [lastDetection, setLastDetection] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isMobile = useIsMobile();
+
+  // Use a ref for scannedCodes so the Quagga callback always sees the latest value
+  const scannedCodesRef = useRef<string[]>([]);
+  const hasSubmittedRef = useRef(false);
 
   // Auto-start scanning when component mounts
   useEffect(() => {
@@ -50,32 +54,55 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     }
   }, [isMobile]);
 
-  const handleValidScan = (code: string) => {
+  const handleValidScan = (rawCode: string) => {
+    if (hasSubmittedRef.current) return;
+    hasSubmittedRef.current = true;
+
     stopQuaggaScanner();
     setIsScanning(false);
     setIsCameraReady(false);
-    
+
+    // Convert to ISBN only if we can confirm it's a book barcode.
+    // NEVER pad or modify the code unless the result is a valid ISBN-13.
+    let isbn = rawCode;
+
+    if (isValidIsbn(rawCode)) {
+      // Already a valid ISBN-10 or ISBN-13 — use as-is
+      isbn = rawCode;
+    } else if (rawCode.length === 12 && (rawCode.startsWith('78') || rawCode.startsWith('79'))) {
+      // UPC reader dropped leading "9" from ISBN-13: 9780... → 780...
+      const recovered = '9' + rawCode;
+      if (isValidIsbn(recovered)) {
+        isbn = recovered;
+      }
+    }
+    // For any other code (regular UPC, EAN-8, etc.), pass as-is — no padding.
+    // The ISBN service will handle lookup by UPC if needed.
+
+    console.log(`Scan result: raw=${rawCode}, isbn=${isbn}`);
+
     toast({
-      title: "ISBN Detected",
-      description: `Detected ISBN: ${code}`,
+      title: "Barcode Detected",
+      description: `ISBN: ${isbn}`,
     });
-    
+
     if (onScanComplete) {
-      onScanComplete(code);
+      onScanComplete(isbn);
     }
   };
 
   const handleCodeDetected = (code: string) => {
+    if (hasSubmittedRef.current) return;
+
     console.log("Code detected:", code);
     setLastDetection(code);
-    
-    setScannedCodes(prev => {
-      const newCodes = [...prev, code];
-      if (newCodes.length > 5) return newCodes.slice(newCodes.length - 5);
-      return newCodes;
-    });
-    
-    if (validateDetection(code, scannedCodes)) {
+
+    // Update ref directly so validateDetection always sees latest
+    const codes = scannedCodesRef.current;
+    codes.push(code);
+    if (codes.length > 20) codes.splice(0, codes.length - 20);
+
+    if (validateDetection(code, codes)) {
       handleValidScan(code);
     }
   };
@@ -84,9 +111,9 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     if (result && result.boxes) {
       const drawingCanvas = scannerRef.current?.querySelector('canvas.drawingBuffer') as HTMLCanvasElement | null;
       const ctx = drawingCanvas?.getContext('2d');
-      
+
       if (ctx && result.boxes) {
-        ctx.clearRect(0, 0, parseInt(drawingCanvas?.getAttribute('width') || '0'), 
+        ctx.clearRect(0, 0, parseInt(drawingCanvas?.getAttribute('width') || '0'),
                       parseInt(drawingCanvas?.getAttribute('height') || '0'));
         result.boxes.filter(box => box !== result.box).forEach(box => {
           ctx.strokeStyle = 'green';
@@ -96,8 +123,8 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
 
       if (result.box && ctx) {
         ctx.strokeStyle = 'red';
-        ctx.strokeRect(result.box[0], result.box[1], 
-                      result.box[2] - result.box[0], 
+        ctx.strokeRect(result.box[0], result.box[1],
+                      result.box[2] - result.box[0],
                       result.box[3] - result.box[1]);
       }
     }
@@ -114,7 +141,6 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     }
 
     console.log("Initializing scanner...");
-    console.log("Scanner container:", scannerRef.current);
     console.log("Is mobile device:", isMobile);
 
     const targetElement = scannerRef.current;
@@ -136,7 +162,7 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
       },
       onInitSuccess: () => {
         setIsCameraReady(true);
-        
+
         setTimeout(() => {
           const { isValid, errorMessage } = checkVideoStream(scannerRef.current);
           if (!isValid) {
@@ -150,10 +176,11 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
 
   const handleStartScanning = () => {
     setIsScanning(true);
-    setScannedCodes([]);
+    scannedCodesRef.current = [];
+    hasSubmittedRef.current = false;
     setLastDetection('');
     setErrorMessage(null);
-    
+
     if (!isCameraSupported()) {
       toast({
         title: "Browser Not Supported",
@@ -170,12 +197,12 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     const idealWidth = isMobile ? 720 : 1280;
     const idealHeight = isMobile ? 1280 : 720;
 
-    navigator.mediaDevices.getUserMedia({ 
-      video: { 
+    navigator.mediaDevices.getUserMedia({
+      video: {
         facingMode,
         width: { ideal: idealWidth },
         height: { ideal: idealHeight }
-      } 
+      }
     })
       .then(() => {
         console.log("Camera access granted");
@@ -184,13 +211,13 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
       .catch((err) => {
         console.error("Camera access error:", err);
         const errorMsg = getCameraErrorMessage(err);
-        
+
         toast({
           title: "Camera Access Required",
           description: errorMsg,
           variant: "destructive",
         });
-        
+
         setIsScanning(false);
         setErrorMessage(errorMsg);
         setShowRetry(true);

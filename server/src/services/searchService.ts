@@ -10,6 +10,12 @@ export const indexBook = async (book: any) => {
     ? (typeof book.authors[0] === 'string' ? book.authors : book.authors)
     : [];
 
+  // Normalize subjects: may be array of objects { name: string } or strings
+  let subjects: string[] | undefined;
+  if (Array.isArray(book.subjects)) {
+    subjects = book.subjects.map((s: any) => (typeof s === 'string' ? s : s?.name || '')).filter(Boolean);
+  }
+
   const doc: any = {
     id: book.id,
     title: book.title,
@@ -24,7 +30,7 @@ export const indexBook = async (book: any) => {
     cover_url: book.cover_url || undefined,
     cover_small_url: book.cover_small_url || undefined,
     cover_large_url: book.cover_large_url || undefined,
-    subjects: book.subjects || undefined,
+    subjects: subjects || undefined,
   };
 
   // Generate embedding vector

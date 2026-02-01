@@ -13,7 +13,6 @@ import { userRoutes } from './routes/users';
 import { locationRoutes } from './routes/locations';
 import { collectionRoutes } from './routes/collections';
 import { createBooksIndex } from './config/elasticsearch';
-import { syncAllBooks } from './services/searchService';
 
 dotenv.config();
 
@@ -49,7 +48,6 @@ app.listen(port, async () => {
   // Initialize Elasticsearch index and sync books
   try {
     await createBooksIndex();
-    await syncAllBooks();
   } catch (err) {
     console.error('Elasticsearch initialization failed (search will be unavailable):', err);
   }

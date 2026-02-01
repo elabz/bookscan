@@ -6,6 +6,7 @@ import { addBook, searchOpenLibrary } from '@/services/bookService';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchBookByISBN } from '@/services/isbnService';
+import { updateBookLocation } from '@/services/locationService';
 
 interface AddBookContextType {
   searchResults: BookType[];
@@ -33,7 +34,7 @@ export const useAddBook = () => {
   return context;
 };
 
-export const AddBookProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?: string | null }> = ({ children, locationId }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { userId } = useAuth();
@@ -99,12 +100,15 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsSubmitting(true);
       const userIdString = userId ? String(userId) : undefined;
       const createdBook = await addBook(newBook as BookType, userIdString);
-      
+      if (locationId && createdBook.id) {
+        await updateBookLocation(createdBook.id, locationId).catch(console.error);
+      }
+
       toast({
         title: 'Book Added',
         description: `"${createdBook.title}" has been added to your library.`
       });
-      
+
       navigate('/library');
     } catch (error) {
       console.error('Failed to add book:', error);
@@ -123,12 +127,15 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsSubmitting(true);
       const userIdString = userId ? String(userId) : undefined;
       const createdBook = await addBook(book, userIdString);
-      
+      if (locationId && createdBook.id) {
+        await updateBookLocation(createdBook.id, locationId).catch(console.error);
+      }
+
       toast({
         title: 'Book Added',
         description: `"${createdBook.title}" has been added to your library.`
       });
-      
+
       navigate('/library');
     } catch (error) {
       console.error('Failed to add book:', error);
@@ -206,12 +213,15 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       console.log('Adding book to library with userId:', userId);
       const addedBook = await addBook(foundBook, userId);
-      
+      if (locationId && addedBook.id) {
+        await updateBookLocation(addedBook.id, locationId).catch(console.error);
+      }
+
       toast({
         title: "Success!",
         description: `"${addedBook.title}" has been added to your library`,
       });
-      
+
       navigate('/library');
     } catch (error) {
       console.error('Failed to add book:', error);

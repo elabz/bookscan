@@ -30,7 +30,7 @@ export const DesktopNav = ({
   return (
     <>
       {/* Navigation Links */}
-      <nav className="hidden md:flex items-center space-x-8">
+      <nav className="hidden md:flex items-center gap-8">
         {isSignedIn ? (
           <>
             <NavLink to="/library">
@@ -53,7 +53,7 @@ export const DesktopNav = ({
       </nav>
       
       {/* Search and Actions */}
-      <div className="hidden md:flex items-center space-x-4">
+      <div className="hidden md:flex items-center gap-4">
         {isSignedIn ? (
           <>
             <SearchBar 

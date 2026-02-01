@@ -1,13 +1,29 @@
 import { api } from '@/lib/api';
 
+export type LocationType = 'home' | 'storage' | 'bookshelf' | 'shelf' | 'box';
+
 export interface Location {
   id: string;
   user_id: string;
   name: string;
   parent_id: string | null;
-  type: 'room' | 'bookcase' | 'shelf';
+  type: LocationType;
   created_at: string;
+  children?: Location[];
 }
+
+/** Top-level location types (no parent) */
+export const TOP_LEVEL_TYPES: LocationType[] = ['home', 'storage'];
+/** Child location types (require a parent) */
+export const CHILD_TYPES: LocationType[] = ['bookshelf', 'shelf', 'box'];
+
+export const LOCATION_TYPE_LABELS: Record<LocationType, string> = {
+  home: 'Home',
+  storage: 'Storage',
+  bookshelf: 'Bookshelf',
+  shelf: 'Shelf',
+  box: 'Box',
+};
 
 export const getLocations = async (): Promise<Location[]> => {
   return api.get<Location[]>('/locations');
@@ -28,3 +44,27 @@ export const deleteLocation = async (id: string): Promise<void> => {
 export const updateBookLocation = async (bookId: string, locationId: string | null): Promise<void> => {
   await api.patch(`/library/book/${bookId}/location`, { location_id: locationId });
 };
+
+/**
+ * Build a tree structure from flat location list.
+ * Top-level locations (no parent_id) get children nested inside.
+ */
+export function buildLocationTree(locations: Location[]): Location[] {
+  const map = new Map<string, Location>();
+  const roots: Location[] = [];
+
+  for (const loc of locations) {
+    map.set(loc.id, { ...loc, children: [] });
+  }
+
+  for (const loc of locations) {
+    const node = map.get(loc.id)!;
+    if (loc.parent_id && map.has(loc.parent_id)) {
+      map.get(loc.parent_id)!.children!.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  return roots;
+}

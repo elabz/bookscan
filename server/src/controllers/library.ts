@@ -6,6 +6,94 @@ import { indexBook } from '../services/searchService';
 
 type AuthRequest = SessionRequest;
 
+// Convert ISBN-10 to ISBN-13
+const isbn10to13 = (isbn10: string): string | null => {
+  if (isbn10.length !== 10) return null;
+  const base = '978' + isbn10.slice(0, 9);
+  let sum = 0;
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return base + check;
+};
+
+// Convert ISBN-13 to ISBN-10
+const isbn13to10 = (isbn13: string): string | null => {
+  if (isbn13.length !== 13 || !isbn13.startsWith('978')) return null;
+  const base = isbn13.slice(3, 12);
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(base[i]) * (10 - i);
+  }
+  const check = (11 - (sum % 11)) % 11;
+  return base + (check === 10 ? 'X' : check.toString());
+};
+
+// Lookup a book by ISBN or UPC in local database
+export const lookupBookByCode = async (req: SessionRequest, res: Response) => {
+  try {
+    const code = (req.query.code as string || '').replace(/[-\s]/g, '');
+    if (!code) return res.status(400).json({ error: 'Missing code parameter' });
+
+    // Build list of ISBN variants to search
+    const isbnVariants = [code];
+    if (code.length === 10) {
+      const isbn13 = isbn10to13(code);
+      if (isbn13) isbnVariants.push(isbn13);
+    } else if (code.length === 13 && code.startsWith('978')) {
+      const isbn10 = isbn13to10(code);
+      if (isbn10) isbnVariants.push(isbn10);
+    }
+
+    // Search by ISBN (any variant)
+    let result = await pool.query(
+      "SELECT * FROM books WHERE isbn = ANY($1) LIMIT 1",
+      [isbnVariants]
+    );
+
+    // Search identifiers JSONB for isbn_10, isbn_13
+    if (result.rows.length === 0) {
+      for (const variant of isbnVariants) {
+        result = await pool.query(
+          `SELECT * FROM books WHERE
+            identifiers->'isbn_10' @> $1::jsonb OR
+            identifiers->'isbn_13' @> $1::jsonb
+          LIMIT 1`,
+          [JSON.stringify([variant])]
+        );
+        if (result.rows.length > 0) break;
+      }
+    }
+
+    // Search by UPC stored in identifiers JSONB
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        "SELECT * FROM books WHERE identifiers->'upc' @> $1::jsonb LIMIT 1",
+        [JSON.stringify([code])]
+      );
+    }
+
+    // Also try without leading zero (EAN reader adds implicit 0 to UPC)
+    if (result.rows.length === 0 && code.length === 13 && code.startsWith('0')) {
+      const upc12 = code.slice(1);
+      result = await pool.query(
+        "SELECT * FROM books WHERE identifiers->'upc' @> $1::jsonb LIMIT 1",
+        [JSON.stringify([upc12])]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    return res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error looking up book by code:', err);
+    return res.status(500).json({ error: 'Lookup failed' });
+  }
+};
+
 // Get featured books (public, no auth)
 export const getFeaturedBooks = async (_req: Request, res: Response) => {
   try {
@@ -25,7 +113,7 @@ export const getUserBooks = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
 
     const result = await pool.query(
-      `SELECT b.* FROM books b
+      `SELECT b.*, ub.location_id FROM books b
        INNER JOIN user_books ub ON b.id = ub.book_id
        WHERE ub.user_id = $1
        ORDER BY ub.added_at DESC`,
@@ -164,6 +252,30 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
       );
     }
 
+    // If reusing an existing book, merge in any new identifiers (e.g. UPC from a scan)
+    if (bookId && book.identifiers) {
+      const existingBook = await pool.query('SELECT identifiers FROM books WHERE id = $1', [bookId]);
+      const existingIds = existingBook.rows[0]?.identifiers || {};
+      const newIds = book.identifiers;
+      let merged = { ...existingIds };
+      let changed = false;
+      for (const [key, values] of Object.entries(newIds)) {
+        if (!values) continue;
+        const existing = merged[key] || [];
+        const toAdd = (Array.isArray(values) ? values : [values]).filter((v: string) => !existing.includes(v));
+        if (toAdd.length > 0) {
+          merged[key] = [...existing, ...toAdd];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await pool.query(
+          'UPDATE books SET identifiers = $1, updated_at = NOW() WHERE id = $2',
+          [JSON.stringify(merged), bookId]
+        );
+      }
+    }
+
     // Add to user's library (ignore if already exists)
     await pool.query(
       'INSERT INTO user_books (user_id, book_id, added_at) VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING',
@@ -195,61 +307,174 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'You do not own this book' });
     }
 
-    // Build dynamic SET clause from allowed fields
-    const allowedFields: Record<string, string> = {
-      title: 'title',
-      authors: 'authors',
-      isbn: 'isbn',
-      publisher: 'publisher',
-      published_date: 'published_date',
-      description: 'description',
-      page_count: 'page_count',
-      language: 'language',
-      edition: 'edition',
-      width: 'width',
-      height: 'height',
-      cover_url: 'cover_url',
-      cover_small_url: 'cover_small_url',
-      cover_large_url: 'cover_large_url',
-    };
+    // Check if user is admin
+    const adminCheck = await pool.query(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [userId]
+    );
+    const isAdmin = adminCheck.rows[0]?.is_admin === true;
 
-    const setClauses: string[] = [];
-    const values: any[] = [];
-    let paramIndex = 1;
+    const allowedFields = [
+      'title', 'authors', 'isbn', 'publisher', 'published_date',
+      'description', 'page_count', 'language', 'edition', 'width', 'height',
+      'cover_url', 'cover_small_url', 'cover_large_url',
+    ];
 
-    for (const [key, column] of Object.entries(allowedFields)) {
+    // Filter to only allowed fields
+    const filteredUpdates: Record<string, any> = {};
+    for (const key of allowedFields) {
       if (key in updates) {
-        let val = updates[key];
-        // JSON-stringify arrays/objects for jsonb/array columns
-        if (key === 'authors' && Array.isArray(val)) {
-          val = JSON.stringify(val);
-        }
-        setClauses.push(`${column} = $${paramIndex}`);
-        values.push(val ?? null);
-        paramIndex++;
+        filteredUpdates[key] = updates[key];
       }
     }
 
-    if (setClauses.length === 0) {
+    if (Object.keys(filteredUpdates).length === 0) {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    setClauses.push(`updated_at = NOW()`);
-    values.push(id);
+    // Cover URL changes are always applied immediately (they're user-specific photos)
+    const coverFields = ['cover_url', 'cover_small_url', 'cover_large_url'];
+    const isCoverOnlyUpdate = Object.keys(filteredUpdates).every(k => coverFields.includes(k));
 
-    const result = await pool.query(
-      `UPDATE books SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
-      values
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Book not found' });
+    if (isAdmin || isCoverOnlyUpdate) {
+      // Admin or cover-only: apply directly
+      return applyBookUpdate(id, filteredUpdates, res);
     }
 
-    return res.json(result.rows[0]);
+    // Non-admin editing content fields: queue for approval
+    const result = await pool.query(
+      `INSERT INTO pending_book_edits (book_id, user_id, changes)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [id, userId, JSON.stringify(filteredUpdates)]
+    );
+
+    return res.json({
+      pending: true,
+      message: 'Your changes have been submitted for review',
+      edit: result.rows[0],
+    });
   } catch (err) {
     console.error('Error updating book:', err);
     return res.status(500).json({ error: 'Failed to update book' });
+  }
+};
+
+// Helper: apply book updates directly
+async function applyBookUpdate(bookId: string, updates: Record<string, any>, res: Response) {
+  const setClauses: string[] = [];
+  const values: any[] = [];
+  let paramIndex = 1;
+
+  for (const [key, val] of Object.entries(updates)) {
+    const finalVal = (key === 'authors' && Array.isArray(val)) ? JSON.stringify(val) : val;
+    setClauses.push(`${key} = $${paramIndex}`);
+    values.push(finalVal ?? null);
+    paramIndex++;
+  }
+
+  setClauses.push(`updated_at = NOW()`);
+  values.push(bookId);
+
+  const result = await pool.query(
+    `UPDATE books SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return res.status(404).json({ error: 'Book not found' });
+  }
+
+  // Re-index in Elasticsearch
+  indexBook(result.rows[0]).catch((err) =>
+    console.error(`Failed to re-index book ${bookId}:`, err)
+  );
+
+  return res.json(result.rows[0]);
+}
+
+// Admin: review pending edits
+export const getPendingEdits = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+    if (!adminCheck.rows[0]?.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const result = await pool.query(
+      `SELECT pe.*, b.title as book_title
+       FROM pending_book_edits pe
+       JOIN books b ON b.id = pe.book_id
+       WHERE pe.status = 'pending'
+       ORDER BY pe.created_at`
+    );
+    return res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching pending edits:', err);
+    return res.status(500).json({ error: 'Failed to fetch pending edits' });
+  }
+};
+
+export const reviewEdit = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const { editId } = req.params;
+    const { action } = req.body; // 'approve' or 'reject'
+
+    const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+    if (!adminCheck.rows[0]?.is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const editResult = await pool.query(
+      'SELECT * FROM pending_book_edits WHERE id = $1 AND status = $2',
+      [editId, 'pending']
+    );
+    if (editResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Pending edit not found' });
+    }
+
+    const edit = editResult.rows[0];
+
+    if (action === 'approve') {
+      // Apply the changes
+      const changes = edit.changes;
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+
+      for (const [key, val] of Object.entries(changes)) {
+        const finalVal = (key === 'authors' && Array.isArray(val)) ? JSON.stringify(val) : val;
+        setClauses.push(`${key} = $${paramIndex}`);
+        values.push(finalVal ?? null);
+        paramIndex++;
+      }
+      setClauses.push('updated_at = NOW()');
+      values.push(edit.book_id);
+
+      const bookResult = await pool.query(
+        `UPDATE books SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`,
+        values
+      );
+
+      // Re-index
+      if (bookResult.rows.length > 0) {
+        indexBook(bookResult.rows[0]).catch((err) =>
+          console.error(`Failed to re-index book ${edit.book_id}:`, err)
+        );
+      }
+    }
+
+    // Mark edit as approved/rejected
+    await pool.query(
+      `UPDATE pending_book_edits SET status = $1, reviewed_by = $2, reviewed_at = NOW() WHERE id = $3`,
+      [action === 'approve' ? 'approved' : 'rejected', userId, editId]
+    );
+
+    return res.json({ success: true, action });
+  } catch (err) {
+    console.error('Error reviewing edit:', err);
+    return res.status(500).json({ error: 'Failed to review edit' });
   }
 };
 
@@ -296,6 +521,8 @@ export const addBookImage = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
     const { id: bookId } = req.params;
     const { url, url_small, url_large, is_cover, sort_order, caption } = req.body;
+
+    console.log('[addBookImage] bookId:', bookId, 'url:', url, 'is_cover:', is_cover, 'userId:', userId);
 
     if (!url) {
       return res.status(400).json({ error: 'url is required' });

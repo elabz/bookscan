@@ -4,19 +4,24 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BookPlus, BookCheck, Tag, Loader2, Pencil } from 'lucide-react';
 import { formatIdentifiers } from '@/utils/bookUtils';
+import { LocationPicker } from '@/components/library/LocationPicker';
 
 interface BookDetailsCardProps {
   book: Book;
   onAddToLibrary: () => void;
   onEditBook?: () => void;
   isAddingToLibrary?: boolean;
+  selectedLocationId?: string | null;
+  onLocationChange?: (locationId: string | null) => void;
 }
 
-export const BookDetailsCard = ({ 
-  book, 
-  onAddToLibrary, 
+export const BookDetailsCard = ({
+  book,
+  onAddToLibrary,
   onEditBook,
-  isAddingToLibrary = false 
+  isAddingToLibrary = false,
+  selectedLocationId,
+  onLocationChange,
 }: BookDetailsCardProps) => {
   // Helper function to handle description display
   const getDescriptionText = (description: any): string => {
@@ -147,6 +152,13 @@ export const BookDetailsCard = ({
           )}
         </div>
       </div>
+
+      {onLocationChange && (
+        <div className="mt-4 pt-4 border-t flex items-center gap-3 text-sm text-muted-foreground">
+          <span className="shrink-0">Location:</span>
+          <LocationPicker value={selectedLocationId ?? null} onChange={onLocationChange} />
+        </div>
+      )}
     </div>
   );
 };

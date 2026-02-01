@@ -59,6 +59,7 @@ export interface Book {
   language?: string;
   edition?: string;
   genres?: Genre[];
+  location_id?: string | null;
   addedByUserId?: string;
   createdAt?: string;
   updatedAt?: string;

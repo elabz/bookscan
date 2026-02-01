@@ -95,6 +95,7 @@ export const BookEditor: React.FC<BookEditorProps> = ({ book, onSave }) => {
         <div className="col-span-1">
           <BookCoverEditor
             isbn={formData.isbn}
+            bookId={book.id}
             coverUrls={coverUrls}
             isUploading={isUploading}
             onCoverChange={handleCoverChange}

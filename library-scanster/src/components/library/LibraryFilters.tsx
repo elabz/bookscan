@@ -3,7 +3,7 @@ import { getLocations, Location } from '@/services/locationService';
 import { getCollections, Collection } from '@/services/collectionService';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, FolderOpen, X } from 'lucide-react';
+import { Library, FolderOpen, X } from 'lucide-react';
 
 interface LibraryFiltersProps {
   selectedLocationId: string | null;
@@ -35,7 +35,7 @@ export const LibraryFilters = ({
       {/* Location filter */}
       {locations.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <MapPin className="h-4 w-4 text-muted-foreground" />
+          <Library className="h-4 w-4 text-muted-foreground" />
           {locations.map((loc: Location) => (
             <Badge
               key={loc.id}

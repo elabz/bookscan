@@ -26,7 +26,7 @@ export const processImageFromDataURL = async (dataUrl: string, isbn?: string): P
 export const processAndUploadImage = async (imageSource: string | File, isbn?: string): Promise<{ small: string; medium: string; large: string }> => {
   const imageBlob = await fetchImageAsBlob(imageSource);
   const filename = isbn || `cover-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-  return uploadImageViaBackend(imageBlob, filename);
+  return uploadImageViaBackend(imageBlob, filename, { crop: 'cover' });
 };
 
 // Re-export from other modules for backward compatibility

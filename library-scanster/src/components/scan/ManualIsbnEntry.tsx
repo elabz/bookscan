@@ -19,7 +19,7 @@ export const ManualIsbnEntry = ({ onSubmit, isSearching }: ManualIsbnEntryProps)
     
     // Submit the original ISBN (with hyphens if present)
     // The search service will normalize it
-    onSubmit(manualIsbn.trim());
+    onSubmit(manualIsbn.replace(/^isbn[:\s]*/i, '').trim());
   };
 
   return (
