@@ -113,7 +113,11 @@ export const getUserBooks = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
 
     const result = await pool.query(
-      `SELECT b.*, ub.location_id FROM books b
+      `SELECT b.*, ub.location_id,
+              ub.cover_url as user_cover_url,
+              ub.cover_small_url as user_cover_small_url,
+              ub.cover_large_url as user_cover_large_url
+       FROM books b
        INNER JOIN user_books ub ON b.id = ub.book_id
        WHERE ub.user_id = $1
        ORDER BY ub.added_at DESC`,
@@ -332,12 +336,34 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'No valid fields to update' });
     }
 
-    // Cover URL changes are always applied immediately (they're user-specific photos)
     const coverFields = ['cover_url', 'cover_small_url', 'cover_large_url'];
     const isCoverOnlyUpdate = Object.keys(filteredUpdates).every(k => coverFields.includes(k));
 
-    if (isAdmin || isCoverOnlyUpdate) {
-      // Admin or cover-only: apply directly
+    // Cover-only updates go to user_books as personal override (unless admin)
+    if (isCoverOnlyUpdate && !isAdmin) {
+      const setClauses: string[] = [];
+      const values: any[] = [];
+      let paramIndex = 1;
+      for (const [key, val] of Object.entries(filteredUpdates)) {
+        setClauses.push(`${key} = $${paramIndex}`);
+        values.push(val ?? null);
+        paramIndex++;
+      }
+      values.push(userId, id);
+      await pool.query(
+        `UPDATE user_books SET ${setClauses.join(', ')} WHERE user_id = $${paramIndex} AND book_id = $${paramIndex + 1}`,
+        values
+      );
+      // Queue for admin approval as global cover
+      await pool.query(
+        `INSERT INTO pending_book_edits (book_id, user_id, changes) VALUES ($1, $2, $3)`,
+        [id, userId, JSON.stringify(filteredUpdates)]
+      );
+      return res.json({ success: true, personal: true, message: 'Cover set as personal override, pending admin approval for global change' });
+    }
+
+    if (isAdmin) {
+      // Admin: apply directly
       return applyBookUpdate(id, filteredUpdates, res);
     }
 
@@ -534,16 +560,37 @@ export const addBookImage = async (req: AuthRequest, res: Response) => {
       [bookId, userId, url, url_small || null, url_large || null, is_cover || false, sort_order || 0, caption || null]
     );
 
-    // If set as cover, update book's cover URLs and unset other covers
+    // If set as cover, set personal override and queue for admin approval
     if (is_cover) {
       await pool.query(
         'UPDATE book_images SET is_cover = false WHERE book_id = $1 AND id != $2',
         [bookId, result.rows[0].id]
       );
+
+      const coverUrl = url;
+      const coverSmallUrl = url_small || url;
+      const coverLargeUrl = url_large || url;
+
+      // Personal cover override
       await pool.query(
-        'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
-        [url, url_small || url, url_large || url, bookId]
+        `UPDATE user_books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3
+         WHERE user_id = $4 AND book_id = $5`,
+        [coverUrl, coverSmallUrl, coverLargeUrl, userId, bookId]
       );
+
+      // Check if admin — apply globally or queue
+      const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+      if (adminCheck.rows[0]?.is_admin) {
+        await pool.query(
+          'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
+          [coverUrl, coverSmallUrl, coverLargeUrl, bookId]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO pending_book_edits (book_id, user_id, changes) VALUES ($1, $2, $3)`,
+          [bookId, userId, JSON.stringify({ cover_url: coverUrl, cover_small_url: coverSmallUrl, cover_large_url: coverLargeUrl })]
+        );
+      }
     }
 
     return res.status(201).json(result.rows[0]);
@@ -570,7 +617,7 @@ export const deleteBookImage = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Set an image as the book's cover
+// Set an image as the book's cover (personal override + queue for admin approval)
 export const setImageAsCover = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.session!.getUserId();
@@ -587,17 +634,40 @@ export const setImageAsCover = async (req: AuthRequest, res: Response) => {
 
     const image = imageResult.rows[0];
 
-    // Unset all covers for this book, set this one
+    // Unset all covers for this book (for this user), set this one
     await pool.query('UPDATE book_images SET is_cover = false WHERE book_id = $1', [bookId]);
     await pool.query('UPDATE book_images SET is_cover = true WHERE id = $1', [imageId]);
 
-    // Update book cover URLs
+    const coverUrl = image.url;
+    const coverSmallUrl = image.url_small || image.url;
+    const coverLargeUrl = image.url_large || image.url;
+
+    // Set personal cover override on user_books
     await pool.query(
-      'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
-      [image.url, image.url_small || image.url, image.url_large || image.url, bookId]
+      `UPDATE user_books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3
+       WHERE user_id = $4 AND book_id = $5`,
+      [coverUrl, coverSmallUrl, coverLargeUrl, userId, bookId]
     );
 
-    return res.json({ success: true });
+    // Check if user is admin — if so, also update global cover
+    const adminCheck = await pool.query('SELECT is_admin FROM users WHERE id = $1', [userId]);
+    const isAdmin = adminCheck.rows[0]?.is_admin === true;
+
+    if (isAdmin) {
+      await pool.query(
+        'UPDATE books SET cover_url = $1, cover_small_url = $2, cover_large_url = $3, updated_at = NOW() WHERE id = $4',
+        [coverUrl, coverSmallUrl, coverLargeUrl, bookId]
+      );
+    } else {
+      // Queue a pending edit for admin to approve as global cover
+      await pool.query(
+        `INSERT INTO pending_book_edits (book_id, user_id, changes)
+         VALUES ($1, $2, $3)`,
+        [bookId, userId, JSON.stringify({ cover_url: coverUrl, cover_small_url: coverSmallUrl, cover_large_url: coverLargeUrl })]
+      );
+    }
+
+    return res.json({ success: true, personal: true });
   } catch (err) {
     console.error('Error setting cover:', err);
     return res.status(500).json({ error: 'Failed to set cover' });

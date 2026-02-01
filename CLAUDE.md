@@ -46,6 +46,20 @@ docker-compose up --build       # start all services
 docker-compose logs -f backend  # view backend logs
 ```
 
+## Database Migrations
+
+Migration SQL files live in `library-scanster/src/db/migrations/` with sequential numbering (`001_`, `002_`, etc.).
+
+To run a migration against the local Docker PostgreSQL:
+```bash
+docker exec bookscan-postgres psql -U bookuser -d bookscan -f /dev/stdin < library-scanster/src/db/migrations/NNN_name.sql
+```
+
+Or run raw SQL directly:
+```bash
+docker exec bookscan-postgres psql -U bookuser -d bookscan -c "SQL_HERE"
+```
+
 ## Key Data Flow
 
 - **ISBN scan**: Client → API → check DB → (miss) → OpenLibrary API → Ollama embedding → store in PostgreSQL with pgvector

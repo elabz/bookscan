@@ -77,12 +77,35 @@ export const fetchBookByISBN = async (isbn: string, detectedUpc?: string): Promi
     let description = '';
     if (bookData.details?.description) {
       if (typeof bookData.details.description === 'string') {
-        description = bookData.details.description;
+        // Could be a stringified JSON like {"type":"/type/text","value":"..."}
+        const desc = bookData.details.description;
+        if (desc.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(desc);
+            description = parsed.value || desc;
+          } catch {
+            description = desc;
+          }
+        } else {
+          description = desc;
+        }
       } else if (bookData.details.description.value) {
         description = bookData.details.description.value;
       }
     } else if (bookData.details?.notes) {
-      description = bookData.details.notes;
+      const notes = bookData.details.notes;
+      if (typeof notes === 'string' && notes.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(notes);
+          description = parsed.value || notes;
+        } catch {
+          description = notes;
+        }
+      } else if (typeof notes === 'string') {
+        description = notes;
+      } else if (notes?.value) {
+        description = notes.value;
+      }
     }
 
     // Extract all the data from the OpenLibrary response
