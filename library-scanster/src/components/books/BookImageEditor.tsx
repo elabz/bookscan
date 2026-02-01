@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { uploadImageViaBackend } from '@/services/cdnService';
 import { rotateImage } from '@/services/imageUtils';
 import { detectAndCropBook } from '@/services/bookDetection';
+import { correctPerspective } from '@/services/perspectiveCorrection';
 import { addBookImage } from '@/services/bookImageService';
 import { BookImage } from '@/types/book';
-import { RotateCw, RotateCcw, Crop, Upload, Sparkles, Wand2, Image as ImageIcon, Loader2, RectangleVertical, RectangleHorizontal } from 'lucide-react';
+import { RotateCw, RotateCcw, Crop, Upload, Sparkles, Wand2, Image as ImageIcon, Loader2, RectangleVertical, RectangleHorizontal, FlipVertical2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 type CropOrientation = 'vertical' | 'horizontal';
@@ -29,6 +30,7 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [isStraightening, setIsStraightening] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -45,6 +47,21 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
     setIsCropping(false);
     setCrop({ x: 0, y: 0 });
     setZoom(1);
+
+    // Auto perspective correction
+    setIsStraightening(true);
+    try {
+      const result = await correctPerspective(file);
+      if (result) {
+        setImageUrl(result.url);
+        setImageBlob(result.blob);
+        toast({ title: 'Perspective corrected' });
+      }
+    } catch {
+      // Silent failure
+    } finally {
+      setIsStraightening(false);
+    }
   };
 
   const onCropComplete = useCallback((_: Area, croppedPixels: Area) => {
@@ -112,6 +129,25 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
     }
   };
 
+  const handleStraighten = async () => {
+    if (!imageBlob) return;
+    setIsStraightening(true);
+    try {
+      const result = await correctPerspective(imageBlob);
+      if (result) {
+        setImageUrl(result.url);
+        setImageBlob(result.blob);
+        toast({ title: 'Perspective corrected' });
+      } else {
+        toast({ title: 'No rectangle detected', description: 'Could not find a book outline to straighten.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Straighten failed', variant: 'destructive' });
+    } finally {
+      setIsStraightening(false);
+    }
+  };
+
   const handleRemoveBackground = async () => {
     if (!imageBlob) return;
     setIsRemovingBg(true);
@@ -155,7 +191,7 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
   };
 
   const cropAspect = cropOrientation === 'vertical' ? 2 / 3 : 3 / 2;
-  const anyBusy = isProcessing || isDetecting || isRemovingBg;
+  const anyBusy = isProcessing || isDetecting || isRemovingBg || isStraightening;
 
   return (
     <div className="space-y-4">
@@ -197,10 +233,12 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
                 <img src={imageUrl} alt="Preview" className="max-w-full max-h-full object-contain" />
               </div>
             )}
-            {isDetecting && (
+            {(isDetecting || isStraightening) && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-white" />
-                <span className="ml-3 text-white font-medium">Detecting objects...</span>
+                <span className="ml-3 text-white font-medium">
+                  {isStraightening ? 'Straightening...' : 'Detecting objects...'}
+                </span>
               </div>
             )}
           </div>
@@ -259,6 +297,10 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => handleRotate(-90)} disabled={anyBusy}>
                   <RotateCcw className="mr-1 h-3 w-3" /> Rotate Left
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleStraighten} disabled={anyBusy}>
+                  <FlipVertical2 className="mr-1 h-3 w-3" />
+                  {isStraightening ? 'Straightening...' : 'Straighten'}
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleRemoveBackground} disabled={anyBusy}>
                   <Sparkles className="mr-1 h-3 w-3" />

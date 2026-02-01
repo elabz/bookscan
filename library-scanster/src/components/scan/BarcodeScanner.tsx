@@ -29,11 +29,15 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
   const scannerRef = useRef<HTMLDivElement>(null);
   const [lastDetection, setLastDetection] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // scanProgress: 0 = nothing seen, 1 = barcode region located, 2+ = partial consensus reads
+  const [scanProgress, setScanProgress] = useState(0);
   const isMobile = useIsMobile();
 
   // Use a ref for scannedCodes so the Quagga callback always sees the latest value
   const scannedCodesRef = useRef<string[]>([]);
   const hasSubmittedRef = useRef(false);
+  // Track when we last saw barcode-like regions (for the activity indicator)
+  const lastBoxTimeRef = useRef(0);
 
   // Auto-start scanning when component mounts
   useEffect(() => {
@@ -102,6 +106,13 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     codes.push(code);
     if (codes.length > 20) codes.splice(0, codes.length - 20);
 
+    // Report consensus progress: how many times the leading candidate has been seen
+    const freq: Record<string, number> = {};
+    for (const c of codes) freq[c] = (freq[c] || 0) + 1;
+    const bestCount = Math.max(...Object.values(freq));
+    // Progress: 2 = first read, 3 = getting close (consensus needs 3)
+    setScanProgress(Math.min(bestCount + 1, 3));
+
     if (validateDetection(code, codes)) {
       handleValidScan(code);
     }
@@ -127,6 +138,17 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
                       result.box[2] - result.box[0],
                       result.box[3] - result.box[1]);
       }
+
+      // Barcode-like region detected — show activity even before a full decode
+      if (result.boxes.length > 0 || result.box) {
+        lastBoxTimeRef.current = Date.now();
+        setScanProgress(prev => Math.max(prev, 1));
+      }
+    }
+
+    // Decay progress if nothing seen for a while
+    if (Date.now() - lastBoxTimeRef.current > 1500 && scannedCodesRef.current.length === 0) {
+      setScanProgress(0);
     }
   };
 
@@ -180,6 +202,7 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     hasSubmittedRef.current = false;
     setLastDetection('');
     setErrorMessage(null);
+    setScanProgress(0);
 
     if (!isCameraSupported()) {
       toast({
@@ -245,6 +268,7 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
       isCameraReady={isCameraReady}
       errorMessage={errorMessage}
       lastDetection={lastDetection}
+      scanProgress={scanProgress}
       showRetry={showRetry}
       scannerRef={scannerRef}
       isMobile={isMobile}

@@ -1,13 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Check, Crop, RotateCw, Loader2, Wand2, Undo2, RectangleVertical, RectangleHorizontal, Maximize } from 'lucide-react';
+import { ArrowLeft, Check, Crop, RotateCw, Loader2, Wand2, Undo2, RectangleVertical, RectangleHorizontal, Maximize, FlipVertical2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CameraView } from '@/components/scan/CameraView';
 import { uploadImageViaBackend } from '@/services/cdnService';
 import { addBookImage } from '@/services/bookImageService';
 import { fetchImageAsBlob, rotateImage } from '@/services/imageUtils';
 import { detectAndCropBook, preloadModel } from '@/services/bookDetection';
+import { correctPerspective } from '@/services/perspectiveCorrection';
 import { useToast } from '@/components/ui/use-toast';
 import Cropper, { Area } from 'react-easy-crop';
 
@@ -19,6 +20,7 @@ const TakePhotoPage = () => {
   const location = useLocation();
   const [isUploading, setIsUploading] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isStraightening, setIsStraightening] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [isCropping, setIsCropping] = useState(false);
@@ -57,6 +59,22 @@ const TakePhotoPage = () => {
     setCapturedImage(dataUrl);
     setImageBlob(blob);
     setUndoStack([]);
+
+    // Auto perspective correction
+    setIsStraightening(true);
+    try {
+      const result = await correctPerspective(blob);
+      if (result) {
+        setUndoStack([{ url: dataUrl, blob }]);
+        setCapturedImage(result.url);
+        setImageBlob(result.blob);
+        toast({ title: 'Perspective corrected' });
+      }
+    } catch {
+      // Silent failure — keep original image
+    } finally {
+      setIsStraightening(false);
+    }
   };
 
   const handleDetectBook = async () => {
@@ -137,6 +155,28 @@ const TakePhotoPage = () => {
     }
   };
 
+  const handleStraighten = async () => {
+    if (!imageBlob || !capturedImage) return;
+    setIsStraightening(true);
+    try {
+      pushUndo(capturedImage, imageBlob);
+      const result = await correctPerspective(imageBlob);
+      if (result) {
+        setCapturedImage(result.url);
+        setImageBlob(result.blob);
+        toast({ title: 'Perspective corrected' });
+      } else {
+        setUndoStack((s) => s.slice(0, -1));
+        toast({ title: 'No rectangle detected', description: 'Could not find a book outline to straighten.', variant: 'destructive' });
+      }
+    } catch {
+      setUndoStack((s) => s.slice(0, -1));
+      toast({ title: 'Straighten failed', variant: 'destructive' });
+    } finally {
+      setIsStraightening(false);
+    }
+  };
+
   const handleSavePhoto = async () => {
     if (!imageBlob) return;
 
@@ -177,7 +217,7 @@ const TakePhotoPage = () => {
   };
 
   const cropAspect = cropMode === 'vertical' ? 2 / 3 : cropMode === 'horizontal' ? 3 / 2 : undefined;
-  const anyBusy = isUploading || isDetecting;
+  const anyBusy = isUploading || isDetecting || isStraightening;
 
   return (
     <PageLayout>
@@ -245,10 +285,12 @@ const TakePhotoPage = () => {
               </>
             ) : (
               <div className="mb-3 relative flex justify-center bg-gray-100 dark:bg-gray-900 rounded-lg p-2">
-                {isDetecting && (
+                {(isDetecting || isStraightening) && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-lg">
                     <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="ml-3 text-white font-medium">Detecting objects...</span>
+                    <span className="ml-3 text-white font-medium">
+                      {isStraightening ? 'Straightening...' : 'Detecting objects...'}
+                    </span>
                   </div>
                 )}
                 <img
@@ -306,6 +348,10 @@ const TakePhotoPage = () => {
                   </Button>
                   <Button size="sm" variant="outline" onClick={handleRotate} disabled={anyBusy}>
                     <RotateCw className="mr-1 h-3 w-3" /> Rotate 90°
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleStraighten} disabled={anyBusy}>
+                    <FlipVertical2 className="mr-1 h-3 w-3" />
+                    {isStraightening ? 'Straightening...' : 'Straighten'}
                   </Button>
                   {undoStack.length > 0 && (
                     <Button size="sm" variant="outline" onClick={handleUndo} disabled={anyBusy}>
