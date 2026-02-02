@@ -1,14 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Check, Crop, RotateCw, Loader2, Wand2, Undo2, RectangleVertical, RectangleHorizontal, Maximize, FlipVertical2 } from 'lucide-react';
+import { ArrowLeft, Check, Crop, RotateCw, Loader2, Wand2, Undo2, RectangleVertical, RectangleHorizontal, Maximize } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { CameraView } from '@/components/scan/CameraView';
 import { uploadImageViaBackend } from '@/services/cdnService';
 import { addBookImage } from '@/services/bookImageService';
 import { fetchImageAsBlob, rotateImage } from '@/services/imageUtils';
 import { detectAndCropBook, preloadModel } from '@/services/bookDetection';
-import { correctPerspective } from '@/services/perspectiveCorrection';
 import { useToast } from '@/components/ui/use-toast';
 import Cropper, { Area } from 'react-easy-crop';
 
@@ -20,7 +19,8 @@ const TakePhotoPage = () => {
   const location = useLocation();
   const [isUploading, setIsUploading] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
-  const [isStraightening, setIsStraightening] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
+  const [freeRotation, setFreeRotation] = useState(0);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [isCropping, setIsCropping] = useState(false);
@@ -126,7 +126,7 @@ const TakePhotoPage = () => {
     }
   };
 
-  const handleRotate = async () => {
+  const handleRotate90 = async () => {
     if (!imageBlob || !capturedImage) return;
     try {
       pushUndo(capturedImage, imageBlob);
@@ -139,26 +139,43 @@ const TakePhotoPage = () => {
     }
   };
 
-  const handleStraighten = async () => {
-    if (!imageBlob || !capturedImage) return;
-    setIsStraightening(true);
+  const applyFreeRotation = async () => {
+    if (!imageBlob || !capturedImage || freeRotation === 0) {
+      setIsRotating(false);
+      setFreeRotation(0);
+      return;
+    }
     try {
       pushUndo(capturedImage, imageBlob);
-      const result = await correctPerspective(imageBlob);
-      if (result) {
-        setCapturedImage(result.url);
-        setImageBlob(result.blob);
-        toast({ title: 'Perspective corrected' });
-      } else {
-        setUndoStack((s) => s.slice(0, -1));
-        toast({ title: 'No rectangle detected', description: 'Could not find a book outline to straighten.', variant: 'destructive' });
-      }
+      const img = new Image();
+      img.src = capturedImage;
+      await new Promise<void>((resolve, reject) => { img.onload = () => resolve(); img.onerror = reject; });
+
+      const radians = (freeRotation * Math.PI) / 180;
+      const sin = Math.abs(Math.sin(radians));
+      const cos = Math.abs(Math.cos(radians));
+      const newW = Math.round(img.width * cos + img.height * sin);
+      const newH = Math.round(img.width * sin + img.height * cos);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = newW;
+      canvas.height = newH;
+      const ctx = canvas.getContext('2d')!;
+      ctx.translate(newW / 2, newH / 2);
+      ctx.rotate(radians);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', 0.92);
+      });
+      setCapturedImage(URL.createObjectURL(blob));
+      setImageBlob(blob);
     } catch {
       setUndoStack((s) => s.slice(0, -1));
-      toast({ title: 'Straighten failed', variant: 'destructive' });
-    } finally {
-      setIsStraightening(false);
+      toast({ title: 'Rotation failed', variant: 'destructive' });
     }
+    setIsRotating(false);
+    setFreeRotation(0);
   };
 
   const handleSavePhoto = async () => {
@@ -201,7 +218,7 @@ const TakePhotoPage = () => {
   };
 
   const cropAspect = cropMode === 'vertical' ? 2 / 3 : cropMode === 'horizontal' ? 3 / 2 : undefined;
-  const anyBusy = isUploading || isDetecting || isStraightening;
+  const anyBusy = isUploading || isDetecting;
 
   return (
     <PageLayout>
@@ -269,21 +286,39 @@ const TakePhotoPage = () => {
               </>
             ) : (
               <div className="mb-3 relative flex justify-center bg-gray-100 dark:bg-gray-900 rounded-lg p-2">
-                {(isDetecting || isStraightening) && (
+                {isDetecting && (
                   <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-lg">
                     <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="ml-3 text-white font-medium">
-                      {isStraightening ? 'Straightening...' : 'Detecting objects...'}
-                    </span>
+                    <span className="ml-3 text-white font-medium">Detecting objects...</span>
                   </div>
                 )}
                 <img
                   src={capturedImage}
                   alt="Captured photo"
                   className="object-contain rounded-lg"
-                  style={{ maxHeight: 'calc(100vh - 340px)', minHeight: '150px' }}
+                  style={{
+                    maxHeight: 'calc(100vh - 340px)',
+                    minHeight: '150px',
+                    transform: isRotating ? `rotate(${freeRotation}deg)` : undefined,
+                    transition: isRotating ? 'transform 0.1s' : undefined,
+                  }}
                 />
               </div>
+              {isRotating && (
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm text-muted-foreground w-16">Rotate</span>
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={0.5}
+                    value={freeRotation}
+                    onChange={(e) => setFreeRotation(Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="text-sm text-muted-foreground w-12 text-right">{freeRotation}°</span>
+                </div>
+              )}
             )}
 
             {/* Editing tools */}
@@ -323,21 +358,33 @@ const TakePhotoPage = () => {
                 </>
               ) : (
                 <>
-                  <Button size="sm" variant="outline" onClick={handleDetectBook} disabled={anyBusy}>
+                  <Button size="sm" variant="outline" onClick={handleDetectBook} disabled={anyBusy || isRotating}>
                     <Wand2 className="mr-1 h-3 w-3" />
                     {isDetecting ? 'Detecting...' : 'Detect Book'}
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setIsCropping(true)} disabled={anyBusy}>
+                  <Button size="sm" variant="outline" onClick={() => setIsCropping(true)} disabled={anyBusy || isRotating}>
                     <Crop className="mr-1 h-3 w-3" /> Crop
                   </Button>
-                  <Button size="sm" variant="outline" onClick={handleRotate} disabled={anyBusy}>
-                    <RotateCw className="mr-1 h-3 w-3" /> Rotate 90°
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={handleStraighten} disabled={anyBusy}>
-                    <FlipVertical2 className="mr-1 h-3 w-3" />
-                    {isStraightening ? 'Straightening...' : 'Straighten'}
-                  </Button>
-                  {undoStack.length > 0 && (
+                  {isRotating ? (
+                    <>
+                      <Button size="sm" onClick={applyFreeRotation}>
+                        Apply Rotation
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setIsRotating(false); setFreeRotation(0); }}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => setIsRotating(true)} disabled={anyBusy}>
+                        <RotateCw className="mr-1 h-3 w-3" /> Rotate
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={handleRotate90} disabled={anyBusy}>
+                        90°
+                      </Button>
+                    </>
+                  )}
+                  {undoStack.length > 0 && !isRotating && (
                     <Button size="sm" variant="outline" onClick={handleUndo} disabled={anyBusy}>
                       <Undo2 className="mr-1 h-3 w-3" /> Undo
                     </Button>
