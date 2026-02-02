@@ -29,6 +29,7 @@ const ScanPage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [lastScannedIsbn, setLastScannedIsbn] = useState<string>("");
   const [isBookNotFound, setIsBookNotFound] = useState(false);
+  const [scanFailed, setScanFailed] = useState(false);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() =>
     sessionStorage.getItem(LOCATION_STORAGE_KEY) || null
   );
@@ -45,7 +46,12 @@ const ScanPage = () => {
   const resetScanState = () => {
     setFoundBook(null);
     setIsBookNotFound(false);
+    setScanFailed(false);
     setLastScannedIsbn("");
+  };
+
+  const handleScanFailed = () => {
+    setScanFailed(true);
   };
 
   const handleIsbnSearch = async (isbn: string, upc?: string) => {
@@ -150,11 +156,15 @@ const ScanPage = () => {
         
         {!foundBook && !isEditing && !isBookNotFound && (
           <>
-            <BarcodeScanner onScanComplete={handleIsbnSearch} />
-            
-            <ManualIsbnEntry 
+            {!scanFailed && (
+              <BarcodeScanner onScanComplete={handleIsbnSearch} onScanFailed={handleScanFailed} />
+            )}
+
+            <ManualIsbnEntry
               onSubmit={handleIsbnSearch}
               isSearching={isSearching}
+              autoFocus={scanFailed}
+              bannerMessage={scanFailed ? "This book has a low quality barcode that cannot be read with the camera. Please add the ISBN manually." : undefined}
             />
           </>
         )}

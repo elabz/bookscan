@@ -12,16 +12,19 @@ import {
   checkVideoStream
 } from './QuaggaScanner';
 import {
-  getCameraErrorMessage,
   isCameraSupported
 } from './CameraErrorHandler';
 
 
 interface BarcodeScannerProps {
   onScanComplete?: (isbn: string) => void;
+  onScanFailed?: () => void;
 }
 
-export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
+// After this many detections without reaching consensus, give up
+const MAX_BAD_READS = 15;
+
+export const BarcodeScanner = ({ onScanComplete, onScanFailed }: BarcodeScannerProps) => {
   const { toast } = useToast();
   const [isScanning, setIsScanning] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -36,16 +39,23 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
   // Use a ref for scannedCodes so the Quagga callback always sees the latest value
   const scannedCodesRef = useRef<string[]>([]);
   const hasSubmittedRef = useRef(false);
+  const totalDetectionsRef = useRef(0);
   // Track when we last saw barcode-like regions (for the activity indicator)
   const lastBoxTimeRef = useRef(0);
+
+  // Generation counter to ignore callbacks from stale Quagga inits
+  // (React StrictMode double-mounts: first init errors, second succeeds)
+  const initGenRef = useRef(0);
 
   // Auto-start scanning when component mounts
   useEffect(() => {
     handleStartScanning();
     return () => {
-      if (isScanning) {
-        stopQuaggaScanner();
-      }
+      initGenRef.current++;
+      stopQuaggaScanner();
+      // Remove leftover video element so the next init starts clean
+      const video = scannerRef.current?.querySelector('video');
+      if (video) video.remove();
     };
   }, []);
 
@@ -87,6 +97,7 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
 
     console.log("Code detected:", code);
     setLastDetection(code);
+    totalDetectionsRef.current++;
 
     // Update ref directly so validateDetection always sees latest
     const codes = scannedCodesRef.current;
@@ -102,6 +113,31 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
 
     if (validateDetection(code, codes)) {
       handleValidScan(code);
+      return;
+    }
+
+    // Too many reads without consensus — barcode is unreadable
+    if (totalDetectionsRef.current >= MAX_BAD_READS) {
+      hasSubmittedRef.current = true;
+      stopQuaggaScanner();
+      setIsScanning(false);
+      setIsCameraReady(false);
+      console.log(`Giving up after ${totalDetectionsRef.current} detections without consensus`);
+      onScanFailed?.();
+    }
+  };
+
+  const handleRejectedRead = (_code: string) => {
+    if (hasSubmittedRef.current) return;
+    totalDetectionsRef.current++;
+
+    if (totalDetectionsRef.current >= MAX_BAD_READS) {
+      hasSubmittedRef.current = true;
+      stopQuaggaScanner();
+      setIsScanning(false);
+      setIsCameraReady(false);
+      console.log(`Giving up after ${totalDetectionsRef.current} rejected/unmatched reads`);
+      onScanFailed?.();
     }
   };
 
@@ -153,13 +189,20 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     console.log("Is mobile device:", isMobile);
 
     const targetElement = scannerRef.current;
+    // Capture current generation so stale callbacks (from StrictMode double-mount) are ignored
+    const gen = initGenRef.current;
 
     initQuaggaScanner({
       targetElement,
       isMobile,
       onDetected: handleCodeDetected,
       onProcessed: handleProcessed,
+      onRejected: handleRejectedRead,
       onInitError: (error) => {
+        if (gen !== initGenRef.current) {
+          console.log("[BarcodeScanner] Ignoring stale init error");
+          return;
+        }
         setErrorMessage("Could not initialize the camera. Please check camera permissions and try again.");
         setIsScanning(false);
         setShowRetry(true);
@@ -170,6 +213,10 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
         });
       },
       onInitSuccess: () => {
+        if (gen !== initGenRef.current) {
+          console.log("[BarcodeScanner] Ignoring stale init success");
+          return;
+        }
         setIsCameraReady(true);
 
         setTimeout(() => {
@@ -187,6 +234,7 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
     setIsScanning(true);
     scannedCodesRef.current = [];
     hasSubmittedRef.current = false;
+    totalDetectionsRef.current = 0;
     setLastDetection('');
     setErrorMessage(null);
     setScanProgress(0);
@@ -203,35 +251,9 @@ export const BarcodeScanner = ({ onScanComplete }: BarcodeScannerProps) => {
       return;
     }
 
-    const facingMode = "environment";
-    const idealWidth = isMobile ? 720 : 1280;
-    const idealHeight = isMobile ? 1280 : 720;
-
-    navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode,
-        width: { ideal: idealWidth },
-        height: { ideal: idealHeight }
-      }
-    })
-      .then(() => {
-        console.log("Camera access granted");
-        initScanner();
-      })
-      .catch((err) => {
-        console.error("Camera access error:", err);
-        const errorMsg = getCameraErrorMessage(err);
-
-        toast({
-          title: "Camera Access Required",
-          description: errorMsg,
-          variant: "destructive",
-        });
-
-        setIsScanning(false);
-        setErrorMessage(errorMsg);
-        setShowRetry(true);
-      });
+    // Let Quagga handle camera access directly — a pre-check getUserMedia
+    // can race with Quagga's own request and cause NaN dimension errors
+    initScanner();
   };
 
   const handleStopScanning = () => {
