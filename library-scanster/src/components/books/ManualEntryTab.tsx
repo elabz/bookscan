@@ -1,10 +1,10 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, Book as BookIcon } from 'lucide-react';
+import { Loader2, Camera } from 'lucide-react';
 import { ManualEntryTabProps } from '@/types/addBook';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Link } from 'react-router-dom';
@@ -31,12 +31,21 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = (props) => {
     isSubmitting: contextIsSubmitting
   } = useAddBook();
 
+  const { setNewBook } = useAddBook();
+
   // Use props if available, otherwise use context
   const newBook = propsNewBook || contextNewBook;
   const handleManualChange = propsHandleManualChange || contextHandleManualChange;
   const handleSubmitManual = propsHandleSubmitManual || contextHandleSubmitManual;
   const isSubmitting = propsIsSubmitting !== undefined ? propsIsSubmitting : contextIsSubmitting;
   const navigateFn = propsNavigate || navigate;
+
+  // Store cover URL from photo page into newBook
+  useEffect(() => {
+    if (props.coverUrl && props.coverUrl !== newBook.cover) {
+      setNewBook(prev => ({ ...prev, cover: props.coverUrl! }));
+    }
+  }, [props.coverUrl]);
 
   return (
     <div className="animate-slide-up" style={{ animationDelay: '100ms' }}>
@@ -46,17 +55,31 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = (props) => {
         <form onSubmit={handleSubmitManual} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
-              <AspectRatio ratio={2/3} className="bg-muted rounded-lg mb-4">
-                <div className="flex items-center justify-center h-full w-full">
-                  <BookIcon className="h-12 w-12 opacity-30" />
-                </div>
+              <AspectRatio ratio={2/3} className="bg-muted rounded-lg overflow-hidden">
+                {newBook.cover ? (
+                  <Link to="/take-photo" state={{ returnPath: '/books/add', activeTab: 'manual' }} className="block w-full h-full relative group">
+                    <img
+                      src={newBook.cover}
+                      alt="Book cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="text-white text-sm font-medium flex items-center gap-1.5">
+                        <Camera className="h-4 w-4" /> Change Cover
+                      </span>
+                    </div>
+                  </Link>
+                ) : (
+                  <Link
+                    to="/take-photo"
+                    state={{ returnPath: '/books/add', activeTab: 'manual' }}
+                    className="flex flex-col items-center justify-center h-full w-full gap-2 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  >
+                    <Camera className="h-8 w-8 opacity-50" />
+                    <span className="text-sm font-medium">Take or Upload Cover</span>
+                  </Link>
+                )}
               </AspectRatio>
-              
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/take-photo" state={{ returnTo: '/books/add' }}>
-                  Take or Upload Cover
-                </Link>
-              </Button>
             </div>
             
             <div className="md:col-span-2 space-y-4">

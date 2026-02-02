@@ -27,4 +27,5 @@ export interface ManualEntryTabProps {
   handleSubmitManual?: (e: React.FormEvent) => Promise<void>;
   isSubmitting?: boolean;
   navigate?: (path: string) => void;
+  coverUrl?: string | null;
 }

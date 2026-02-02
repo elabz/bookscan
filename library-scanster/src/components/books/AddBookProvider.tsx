@@ -43,11 +43,19 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
   const [searchResults, setSearchResults] = useState<BookType[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
-  const [newBook, setNewBook] = useState<Partial<BookType>>({
-    title: '',
-    authors: [''],
-    description: ''
+  const MANUAL_BOOK_KEY = 'addBook_manualDraft';
+  const [newBook, setNewBook] = useState<Partial<BookType>>(() => {
+    try {
+      const saved = sessionStorage.getItem(MANUAL_BOOK_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch { /* ignore */ }
+    return { title: '', authors: [''], description: '' };
   });
+
+  // Persist manual-entry draft to sessionStorage so it survives navigation to /take-photo
+  React.useEffect(() => {
+    sessionStorage.setItem(MANUAL_BOOK_KEY, JSON.stringify(newBook));
+  }, [newBook]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [foundBook, setFoundBook] = useState<BookType | null>(null);
 
@@ -123,6 +131,7 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
         await updateBookLocation(createdBook.id, locationId).catch(console.error);
       }
 
+      sessionStorage.removeItem(MANUAL_BOOK_KEY);
       toast({
         title: 'Book Added',
         description: `"${createdBook.title}" has been added to your library.`

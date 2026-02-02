@@ -1,7 +1,8 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Scan, Search, BookPlus } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SearchTab } from '@/components/books/SearchTab';
 import { ScanTab } from '@/components/books/ScanTab';
@@ -45,7 +46,20 @@ const ScanTabWithManual = ({
 const LOCATION_STORAGE_KEY = 'addBook_selectedLocationId';
 
 const AddBookPage = () => {
-  const [activeTab, setActiveTab] = useState('scan');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(() => location.state?.activeTab || 'scan');
+
+  // Restore tab when navigating back (e.g. from /take-photo)
+  // Also pick up coverUrl returned from TakePhotoPage
+  const [coverFromPhoto, setCoverFromPhoto] = useState<string | null>(null);
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+    if (location.state?.coverUrl) {
+      setCoverFromPhoto(location.state.coverUrl);
+    }
+  }, [location.state]);
 
   // Sticky location — persists across page visits via sessionStorage
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => {
@@ -96,7 +110,7 @@ const AddBookPage = () => {
             </TabsContent>
 
             <TabsContent value="manual">
-              <ManualEntryTab />
+              <ManualEntryTab coverUrl={coverFromPhoto} />
             </TabsContent>
           </Tabs>
         </AddBookProvider>

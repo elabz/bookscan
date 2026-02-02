@@ -36,6 +36,7 @@ const TakePhotoPage = () => {
   const isbn = location.state?.isbn || '';
   const bookId = location.state?.bookId || '';
   const returnPath = location.state?.returnPath || '/books/add';
+  const returnActiveTab = location.state?.activeTab;
 
   // Pre-load ML model while user is framing the photo
   useEffect(() => {
@@ -100,7 +101,7 @@ const TakePhotoPage = () => {
   };
 
   const handleCancel = () => {
-    navigate(returnPath);
+    navigate(returnPath, { state: { activeTab: returnActiveTab } });
   };
 
   const onCropComplete = useCallback((_: Area, croppedPixels: Area) => {
@@ -201,6 +202,7 @@ const TakePhotoPage = () => {
           coverUrl: urls.medium,
           coverSmallUrl: urls.small,
           coverLargeUrl: urls.large,
+          activeTab: returnActiveTab,
         },
       });
 
