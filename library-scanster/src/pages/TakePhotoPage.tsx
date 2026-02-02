@@ -70,22 +70,8 @@ const TakePhotoPage = () => {
 
       const result = await detectAndCropBook(imageBlob);
       if (result) {
-        let finalBlob = result.blob;
-        let finalUrl = result.url;
-
-        // Auto-straighten the cropped detection
-        try {
-          const straightened = await correctPerspective(finalBlob);
-          if (straightened) {
-            finalBlob = straightened.blob;
-            finalUrl = straightened.url;
-          }
-        } catch {
-          // Straighten failed — keep the cropped result as-is
-        }
-
-        setCapturedImage(finalUrl);
-        setImageBlob(finalBlob);
+        setCapturedImage(result.url);
+        setImageBlob(result.blob);
         const detected = result.usedDetection;
         const others = result.allDetections
           .filter((d) => d !== detected)

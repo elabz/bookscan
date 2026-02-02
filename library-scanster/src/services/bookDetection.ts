@@ -207,10 +207,15 @@ export async function detectAndCropBook(
     return null;
   }
 
-  // Score ALL detections — don't pre-filter by class
-  // Any detected object region could be a book that COCO-SSD mislabeled
+  // Only accept classes that could be a book
+  const ACCEPTED_CLASSES = new Set(['book', 'magazine', 'newspaper']);
+  const rejected = predictions.filter((p) => !ACCEPTED_CLASSES.has(p.class));
+  if (rejected.length > 0) {
+    console.log('[bookDetection] Ignored non-book detections:', rejected.map((p) => `${p.class}:${p.score.toFixed(2)}`));
+  }
+
   const scored = predictions
-    .filter((p) => p.score > 0.15) // minimum COCO-SSD confidence
+    .filter((p) => p.score > 0.15 && ACCEPTED_CLASSES.has(p.class))
     .map((det) => scoreCandidate(det, detectCanvas));
 
   scored.sort((a, b) => b.finalScore - a.finalScore);
