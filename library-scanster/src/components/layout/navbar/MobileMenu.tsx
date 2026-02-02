@@ -49,14 +49,12 @@ export const MobileMenu = ({
             <NavLink to="/discover" onClick={() => setIsOpen(false)}>
               Discover
             </NavLink>
-            <NavLink to="/scan" onClick={() => setIsOpen(false)} icon={Scan}>
-              Scan Book
-            </NavLink>
             <Button size="sm" variant="default" className="w-full" onClick={() => {
               navigate('/books/add');
               setIsOpen(false);
             }}>
-              Add Book
+              <Scan className="h-4 w-4 mr-1" />
+              Add / Scan
             </Button>
             <div className="pt-2 flex justify-between items-center">
               <span className="text-sm text-muted-foreground">{userEmail}</span>

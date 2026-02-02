@@ -1,6 +1,6 @@
 
 import { Book, Identifier, Publisher, Link, PublishPlace, BookExcerpt } from '@/types/book';
-import { normalizeIsbn, isUpc, upcToIsbn13 } from '@/utils/isbnUtils';
+import { normalizeIsbn, isUpc, upcToIsbn13, isbn13ToIsbn10 } from '@/utils/isbnUtils';
 import { getOpenLibraryCoverUrl, processAndUploadImage } from '@/services/imageService';
 import { dbBookToAppFormat } from '@/services/converters';
 
@@ -61,6 +61,24 @@ export const fetchBookByISBN = async (isbn: string, detectedUpc?: string): Promi
     const bookData = data[`ISBN:${normalizedIsbn}`];
     
     if (!bookData) {
+      // If ISBN-13 (978-prefix) failed, try the ISBN-10 equivalent
+      const isbn10 = isbn13ToIsbn10(normalizedIsbn);
+      if (isbn10) {
+        console.log(`ISBN-13 lookup failed, trying ISBN-10: ${isbn10}`);
+        const isbn10Response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn10}&format=json&jscmd=details`);
+        if (isbn10Response.ok) {
+          const isbn10Data = await isbn10Response.json();
+          const isbn10Book = isbn10Data[`ISBN:${isbn10}`];
+          if (isbn10Book) {
+            console.log(`Found book via ISBN-10 fallback: ${isbn10}`);
+            // Re-assign so the rest of the function processes this data
+            Object.assign(data, isbn10Data);
+            // bookData is const, so we proceed below with a redirect
+            return fetchBookByISBN(isbn10, upcCode);
+          }
+        }
+      }
+
       // If we had a UPC, try searching OpenLibrary by UPC as a fallback
       if (upcCode) {
         console.log(`ISBN lookup failed, trying UPC search for: ${upcCode}`);

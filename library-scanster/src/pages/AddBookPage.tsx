@@ -6,13 +6,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SearchTab } from '@/components/books/SearchTab';
 import { ScanTab } from '@/components/books/ScanTab';
 import { ManualEntryTab } from '@/components/books/ManualEntryTab';
-import { AddBookProvider } from '@/components/books/AddBookProvider';
-import { LocationPicker } from '@/components/library/LocationPicker';
+import { AddBookProvider, useAddBook } from '@/components/books/AddBookProvider';
+
+
+/** Wrapper that wires ScanTab's "add manually" to pre-fill the manual form and switch tab */
+const ScanTabWithManual = ({
+  selectedLocationId,
+  onLocationChange,
+  setActiveTab,
+}: {
+  selectedLocationId: string | null;
+  onLocationChange: (locId: string | null) => void;
+  setActiveTab: (tab: string) => void;
+}) => {
+  const { setNewBook } = useAddBook();
+
+  const handleSwitchToManual = (isbn13?: string, isbn10?: string) => {
+    setNewBook(prev => ({
+      ...prev,
+      isbn: isbn13 || isbn10 || '',
+      identifiers: {
+        ...(isbn13 ? { isbn_13: [isbn13] } : {}),
+        ...(isbn10 ? { isbn_10: [isbn10] } : {}),
+      },
+    }));
+    setActiveTab('manual');
+  };
+
+  return (
+    <ScanTab
+      selectedLocationId={selectedLocationId}
+      onLocationChange={onLocationChange}
+      onSwitchToManual={handleSwitchToManual}
+    />
+  );
+};
 
 const LOCATION_STORAGE_KEY = 'addBook_selectedLocationId';
 
 const AddBookPage = () => {
-  const [activeTab, setActiveTab] = useState('search');
+  const [activeTab, setActiveTab] = useState('scan');
 
   // Sticky location — persists across page visits via sessionStorage
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => {
@@ -34,7 +67,7 @@ const AddBookPage = () => {
         <h1 className="text-3xl font-bold mb-4 animate-slide-down">Add a Book</h1>
 
         <AddBookProvider locationId={selectedLocationId}>
-          <Tabs defaultValue="search" value={activeTab} onValueChange={setActiveTab} className="animate-fade-in">
+          <Tabs defaultValue="scan" value={activeTab} onValueChange={setActiveTab} className="animate-fade-in">
             <TabsList className="grid grid-cols-3 mb-8">
               <TabsTrigger value="search" className="flex items-center gap-2">
                 <Search className="h-4 w-4" />
@@ -55,7 +88,11 @@ const AddBookPage = () => {
             </TabsContent>
 
             <TabsContent value="scan">
-              <ScanTab />
+              <ScanTabWithManual
+                selectedLocationId={selectedLocationId}
+                onLocationChange={handleLocationChange}
+                setActiveTab={setActiveTab}
+              />
             </TabsContent>
 
             <TabsContent value="manual">
@@ -63,15 +100,6 @@ const AddBookPage = () => {
             </TabsContent>
           </Tabs>
         </AddBookProvider>
-
-        {/* Location picker — subdued, below main content */}
-        <div className="mt-6 flex items-center gap-3 text-sm text-muted-foreground">
-          <span className="shrink-0">Location:</span>
-          <LocationPicker
-            value={selectedLocationId}
-            onChange={handleLocationChange}
-          />
-        </div>
       </div>
     </PageLayout>
   );

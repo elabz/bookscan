@@ -59,22 +59,6 @@ const TakePhotoPage = () => {
     setCapturedImage(dataUrl);
     setImageBlob(blob);
     setUndoStack([]);
-
-    // Auto perspective correction
-    setIsStraightening(true);
-    try {
-      const result = await correctPerspective(blob);
-      if (result) {
-        setUndoStack([{ url: dataUrl, blob }]);
-        setCapturedImage(result.url);
-        setImageBlob(result.blob);
-        toast({ title: 'Perspective corrected' });
-      }
-    } catch {
-      // Silent failure — keep original image
-    } finally {
-      setIsStraightening(false);
-    }
   };
 
   const handleDetectBook = async () => {
@@ -86,8 +70,22 @@ const TakePhotoPage = () => {
 
       const result = await detectAndCropBook(imageBlob);
       if (result) {
-        setCapturedImage(result.url);
-        setImageBlob(result.blob);
+        let finalBlob = result.blob;
+        let finalUrl = result.url;
+
+        // Auto-straighten the cropped detection
+        try {
+          const straightened = await correctPerspective(finalBlob);
+          if (straightened) {
+            finalBlob = straightened.blob;
+            finalUrl = straightened.url;
+          }
+        } catch {
+          // Straighten failed — keep the cropped result as-is
+        }
+
+        setCapturedImage(finalUrl);
+        setImageBlob(finalBlob);
         const detected = result.usedDetection;
         const others = result.allDetections
           .filter((d) => d !== detected)

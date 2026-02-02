@@ -10,6 +10,8 @@ import {
   TOP_LEVEL_TYPES,
   CHILD_TYPES,
   LOCATION_TYPE_LABELS,
+  TYPES_THAT_CAN_HAVE_CHILDREN,
+  ALLOWED_CHILD_TYPES,
 } from '@/services/locationService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -110,7 +112,7 @@ export const LocationManager = () => {
             onClick={() => toggleExpand(loc.id)}
             className="p-0.5 text-muted-foreground hover:text-foreground"
           >
-            {hasChildren || TOP_LEVEL_TYPES.includes(loc.type as LocationType) ? (
+            {hasChildren || TYPES_THAT_CAN_HAVE_CHILDREN.includes(loc.type as LocationType) ? (
               isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
             ) : (
               <span className="w-4" />
@@ -121,8 +123,8 @@ export const LocationManager = () => {
           <span className="font-medium text-sm flex-1">{loc.name}</span>
           <span className="text-xs text-muted-foreground">{LOCATION_TYPE_LABELS[loc.type as LocationType]}</span>
 
-          {/* Add child button — only for top-level locations */}
-          {TOP_LEVEL_TYPES.includes(loc.type as LocationType) && (
+          {/* Add child button — for types that can have children */}
+          {TYPES_THAT_CAN_HAVE_CHILDREN.includes(loc.type as LocationType) && (
             <Button
               variant="ghost"
               size="sm"
@@ -130,6 +132,8 @@ export const LocationManager = () => {
               onClick={() => {
                 setAddingChildOf(isAddingChild ? null : loc.id);
                 setChildName('');
+                const allowedChildren = ALLOWED_CHILD_TYPES[loc.type as LocationType] || CHILD_TYPES;
+                setChildType(allowedChildren[0]);
                 setExpandedIds((prev) => new Set([...prev, loc.id]));
               }}
             >
@@ -155,7 +159,7 @@ export const LocationManager = () => {
               onChange={(e) => setChildType(e.target.value as LocationType)}
               className="h-8 rounded-md border border-input bg-background px-2 text-sm"
             >
-              {CHILD_TYPES.map((t) => (
+              {(ALLOWED_CHILD_TYPES[locations.find(l => l.id === addingChildOf)?.type as LocationType] || CHILD_TYPES).map((t) => (
                 <option key={t} value={t}>{LOCATION_TYPE_LABELS[t]}</option>
               ))}
             </select>

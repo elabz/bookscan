@@ -119,6 +119,24 @@ export const upcToIsbn13 = (upc: string): string | null => {
 };
 
 /**
+ * Converts an ISBN-13 (978-prefix) to ISBN-10.
+ * Returns null if the ISBN-13 doesn't start with 978 (979 has no ISBN-10 equivalent).
+ */
+export const isbn13ToIsbn10 = (isbn13: string): string | null => {
+  const normalized = normalizeIsbn(isbn13);
+  if (normalized.length !== 13 || !normalized.startsWith('978')) return null;
+
+  const body = normalized.slice(3, 12); // 9 digits after 978, before check digit
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += parseInt(body[i]) * (10 - i);
+  }
+  const remainder = (11 - (sum % 11)) % 11;
+  const check = remainder === 10 ? 'X' : remainder.toString();
+  return body + check;
+};
+
+/**
  * Formats an ISBN with proper hyphens based on standard
  */
 export const formatIsbn = (isbn: string): string => {

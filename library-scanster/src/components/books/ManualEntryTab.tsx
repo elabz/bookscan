@@ -84,18 +84,29 @@ export const ManualEntryTab: React.FC<ManualEntryTabProps> = (props) => {
                 />
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="isbn">ISBN</Label>
+                  <Label htmlFor="isbn">ISBN-13</Label>
                   <Input
                     id="isbn"
                     name="isbn"
                     value={newBook.isbn || ''}
                     onChange={handleManualChange}
-                    placeholder="ISBN (optional)"
+                    placeholder="978-..."
                   />
                 </div>
-                
+
+                <div>
+                  <Label htmlFor="isbn10">ISBN-10</Label>
+                  <Input
+                    id="isbn10"
+                    name="isbn10"
+                    value={newBook.identifiers?.isbn_10?.[0] || ''}
+                    onChange={handleManualChange}
+                    placeholder="10-digit ISBN"
+                  />
+                </div>
+
                 <div>
                   <Label htmlFor="publishedDate">Published Date</Label>
                   <Input

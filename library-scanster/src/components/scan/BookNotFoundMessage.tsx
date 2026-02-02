@@ -1,22 +1,26 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCcw, Search } from 'lucide-react';
+import { RefreshCcw, Search, PenLine } from 'lucide-react';
+import { isbn13ToIsbn10 } from '@/utils/isbnUtils';
 
 interface BookNotFoundMessageProps {
   onRescan: () => void;
   onIsbnSubmit?: (isbn: string) => void;
+  onAddManually?: () => void;
   isbnScanned: string;
 }
 
 export const BookNotFoundMessage: React.FC<BookNotFoundMessageProps> = ({
   onRescan,
   onIsbnSubmit,
+  onAddManually,
   isbnScanned,
 }) => {
   const [manualIsbn, setManualIsbn] = useState('');
   const isNonBookBarcode = isbnScanned.length === 12 ||
     (isbnScanned.length === 13 && !isbnScanned.startsWith('978') && !isbnScanned.startsWith('979'));
+  const isbn10Equivalent = isbn13ToIsbn10(isbnScanned);
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +62,21 @@ export const BookNotFoundMessage: React.FC<BookNotFoundMessageProps> = ({
             instead of an ISBN barcode. Look for the ISBN printed as text near the barcode
             (e.g. "ISBN 1-56402-437-7") and enter it below.
           </p>
+        ) : isbn10Equivalent ? (
+          <div className="text-muted-foreground mb-4 max-w-md text-sm space-y-2">
+            <p>This ISBN-13 wasn't found. The book may be listed under its ISBN-10 instead.</p>
+            <p>
+              Look on the book's copyright page for the shorter 10-digit ISBN and enter it below,
+              or{' '}
+              <button
+                type="button"
+                className="text-primary underline hover:no-underline"
+                onClick={() => onIsbnSubmit?.(isbn10Equivalent)}
+              >
+                try ISBN-10: {isbn10Equivalent}
+              </button>
+            </p>
+          </div>
         ) : (
           <p className="text-muted-foreground mb-4 text-sm">
             This book isn't in our database, or the barcode was misread.
@@ -79,10 +98,18 @@ export const BookNotFoundMessage: React.FC<BookNotFoundMessageProps> = ({
           </form>
         )}
 
-        <Button onClick={onRescan} variant="outline" size="sm">
-          <RefreshCcw className="mr-2 h-4 w-4" />
-          Try Scanning Again
-        </Button>
+        <div className="flex gap-2">
+          {onAddManually && (
+            <Button onClick={onAddManually} size="sm">
+              <PenLine className="mr-2 h-4 w-4" />
+              Add Manually
+            </Button>
+          )}
+          <Button onClick={onRescan} variant="outline" size="sm">
+            <RefreshCcw className="mr-2 h-4 w-4" />
+            Scan Again
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -17,6 +17,16 @@ export const TOP_LEVEL_TYPES: LocationType[] = ['home', 'storage'];
 /** Child location types (require a parent) */
 export const CHILD_TYPES: LocationType[] = ['bookshelf', 'shelf', 'box'];
 
+/** Types that can have children added to them */
+export const TYPES_THAT_CAN_HAVE_CHILDREN: LocationType[] = ['home', 'storage', 'bookshelf'];
+
+/** Allowed child types per parent type */
+export const ALLOWED_CHILD_TYPES: Partial<Record<LocationType, LocationType[]>> = {
+  home: ['bookshelf'],
+  storage: ['bookshelf'],
+  bookshelf: ['shelf', 'box'],
+};
+
 export const LOCATION_TYPE_LABELS: Record<LocationType, string> = {
   home: 'Home',
   storage: 'Storage',

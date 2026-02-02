@@ -39,9 +39,6 @@ export const DesktopNav = ({
             <NavLink to="/discover">
               Discover
             </NavLink>
-            <NavLink to="/scan" icon={Scan}>
-              Scan
-            </NavLink>
           </>
         ) : (
           <>
@@ -63,7 +60,8 @@ export const DesktopNav = ({
               className="w-64"
             />
             <Button size="sm" variant="default" onClick={() => navigate('/books/add')}>
-              Add Book
+              <Scan className="h-4 w-4 mr-1" />
+              Add / Scan
             </Button>
             <UserMenu userEmail={userEmail} signOut={signOut} />
           </>

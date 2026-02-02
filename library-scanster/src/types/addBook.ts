@@ -16,6 +16,9 @@ export interface ScanTabProps {
   handleAddScannedBook?: () => Promise<void>;
   isSubmitting?: boolean;
   setFoundBook?: (book: Book | null) => void;
+  selectedLocationId?: string | null;
+  onLocationChange?: (locationId: string | null) => void;
+  onSwitchToManual?: (isbn13?: string, isbn10?: string) => void;
 }
 
 export interface ManualEntryTabProps {

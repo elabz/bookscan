@@ -87,6 +87,7 @@ const ScanPage = () => {
       }
     } catch (error) {
       console.error('Error searching for book:', error);
+      setFoundBook(null);
       setIsBookNotFound(true);
       toast({
         title: "Search Failed",
@@ -169,7 +170,7 @@ const ScanPage = () => {
           </>
         )}
         
-        {isBookNotFound && (
+        {isBookNotFound && !foundBook && (
           <BookNotFoundMessage
             onRescan={resetScanState}
             onIsbnSubmit={(manualIsbn) => handleIsbnSearch(manualIsbn, lastScannedIsbn)}
@@ -194,7 +195,7 @@ const ScanPage = () => {
           </div>
         )}
         
-        {foundBook && !isEditing && (
+        {foundBook && !isEditing && !isBookNotFound && (
           <BookDetailsCard
             book={foundBook}
             onAddToLibrary={handleAddToLibrary}

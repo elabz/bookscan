@@ -21,7 +21,9 @@ interface AddBookContextType {
   handleSelectBook: (book: BookType) => Promise<void>;
   handleIsbnSearch: (isbn: string) => Promise<void>;
   handleAddScannedBook: () => Promise<void>;
+  handleAddAndScanAnother: () => Promise<void>;
   setFoundBook: (book: BookType | null) => void;
+  setNewBook: React.Dispatch<React.SetStateAction<Partial<BookType>>>;
 }
 
 const AddBookContext = createContext<AddBookContextType | undefined>(undefined);
@@ -70,17 +72,34 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
 
   const handleManualChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    
+
     if (name === 'author') {
-      setNewBook({
-        ...newBook,
+      setNewBook(prev => ({
+        ...prev,
         authors: [value]
-      });
+      }));
+    } else if (name === 'isbn10') {
+      setNewBook(prev => ({
+        ...prev,
+        identifiers: {
+          ...prev.identifiers,
+          isbn_10: value ? [value] : undefined,
+        },
+      }));
+    } else if (name === 'isbn') {
+      setNewBook(prev => ({
+        ...prev,
+        isbn: value,
+        identifiers: {
+          ...prev.identifiers,
+          isbn_13: value ? [value] : undefined,
+        },
+      }));
     } else {
-      setNewBook({
-        ...newBook,
+      setNewBook(prev => ({
+        ...prev,
         [name]: value
-      });
+      }));
     }
   };
 
@@ -149,20 +168,20 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
     }
   };
 
-  const handleIsbnSearch = async (isbn: string) => {
+  const handleIsbnSearch = async (isbn: string): Promise<void> => {
     if (!isbn) return;
-    
+
     setIsSearching(true);
     setFoundBook(null);
-    
+
     try {
       toast({
         title: "Searching...",
         description: `Looking up ISBN: ${isbn}`,
       });
-      
+
       const bookData = await fetchBookByISBN(isbn);
-      
+
       if (bookData) {
         setFoundBook(bookData);
         toast({
@@ -172,17 +191,23 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
       } else {
         toast({
           title: "Book Not Found",
-          description: "We couldn't find a book with that ISBN. Please check the number and try again.",
+          description: "This ISBN wasn't found in any database.",
           variant: "destructive",
         });
+        throw new Error('not_found');
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === 'not_found') {
+        // Re-throw so ScanTab can show BookNotFoundMessage
+        throw error;
+      }
       console.error('Error searching for book:', error);
       toast({
         title: "Search Failed",
         description: "There was an error searching for the book. Please try again.",
         variant: "destructive",
       });
+      throw error;
     } finally {
       setIsSearching(false);
     }
@@ -235,6 +260,44 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
     }
   };
 
+  const handleAddAndScanAnother = async () => {
+    if (!foundBook) return;
+    if (!userId) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to add books to your library",
+        variant: "destructive",
+      });
+      navigate('/login');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const addedBook = await addBook(foundBook, userId);
+      if (locationId && addedBook.id) {
+        await updateBookLocation(addedBook.id, locationId).catch(console.error);
+      }
+
+      toast({
+        title: "Added!",
+        description: `"${addedBook.title}" added to your library`,
+      });
+
+      setFoundBook(null);
+    } catch (error) {
+      console.error('Failed to add book:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add book to your library. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const value = {
     searchResults,
     isSearching,
@@ -248,7 +311,9 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
     handleSelectBook,
     handleIsbnSearch,
     handleAddScannedBook,
-    setFoundBook
+    handleAddAndScanAnother,
+    setFoundBook,
+    setNewBook
   };
 
   return (
