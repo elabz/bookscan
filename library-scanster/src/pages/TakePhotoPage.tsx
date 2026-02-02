@@ -285,40 +285,42 @@ const TakePhotoPage = () => {
                 </div>
               </>
             ) : (
-              <div className="mb-3 relative flex justify-center bg-gray-100 dark:bg-gray-900 rounded-lg p-2">
-                {isDetecting && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-lg">
-                    <Loader2 className="h-8 w-8 animate-spin text-white" />
-                    <span className="ml-3 text-white font-medium">Detecting objects...</span>
+              <>
+                <div className="mb-3 relative flex justify-center bg-gray-100 dark:bg-gray-900 rounded-lg p-2">
+                  {isDetecting && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-lg">
+                      <Loader2 className="h-8 w-8 animate-spin text-white" />
+                      <span className="ml-3 text-white font-medium">Detecting objects...</span>
+                    </div>
+                  )}
+                  <img
+                    src={capturedImage}
+                    alt="Captured photo"
+                    className="object-contain rounded-lg"
+                    style={{
+                      maxHeight: 'calc(100vh - 340px)',
+                      minHeight: '150px',
+                      transform: isRotating ? `rotate(${freeRotation}deg)` : undefined,
+                      transition: isRotating ? 'transform 0.1s' : undefined,
+                    }}
+                  />
+                </div>
+                {isRotating && (
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-sm text-muted-foreground w-16">Rotate</span>
+                    <input
+                      type="range"
+                      min={-180}
+                      max={180}
+                      step={0.5}
+                      value={freeRotation}
+                      onChange={(e) => setFreeRotation(Number(e.target.value))}
+                      className="flex-1"
+                    />
+                    <span className="text-sm text-muted-foreground w-12 text-right">{freeRotation}°</span>
                   </div>
                 )}
-                <img
-                  src={capturedImage}
-                  alt="Captured photo"
-                  className="object-contain rounded-lg"
-                  style={{
-                    maxHeight: 'calc(100vh - 340px)',
-                    minHeight: '150px',
-                    transform: isRotating ? `rotate(${freeRotation}deg)` : undefined,
-                    transition: isRotating ? 'transform 0.1s' : undefined,
-                  }}
-                />
-              </div>
-              {isRotating && (
-                <div className="flex items-center gap-3 mb-3">
-                  <span className="text-sm text-muted-foreground w-16">Rotate</span>
-                  <input
-                    type="range"
-                    min={-180}
-                    max={180}
-                    step={0.5}
-                    value={freeRotation}
-                    onChange={(e) => setFreeRotation(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-sm text-muted-foreground w-12 text-right">{freeRotation}°</span>
-                </div>
-              )}
+              </>
             )}
 
             {/* Editing tools */}
