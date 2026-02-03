@@ -11,6 +11,7 @@ export interface UserProfile {
   website?: string;
   phone?: string;
   reading_goal?: number;
+  is_admin?: boolean;
   created_at?: string;
   updated_at?: string;
 }

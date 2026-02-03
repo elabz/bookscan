@@ -15,15 +15,17 @@ interface DesktopNavProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   handleSearch: (e: React.FormEvent) => void;
+  isAdmin?: boolean;
 }
 
 export const DesktopNav = ({ 
-  isSignedIn, 
-  userEmail, 
+  isSignedIn,
+  userEmail,
   signOut,
   searchQuery,
   setSearchQuery,
-  handleSearch
+  handleSearch,
+  isAdmin,
 }: DesktopNavProps) => {
   const navigate = useNavigate();
 
@@ -39,6 +41,11 @@ export const DesktopNav = ({
             <NavLink to="/discover">
               Discover
             </NavLink>
+            {isAdmin && (
+              <NavLink to="/admin">
+                Admin
+              </NavLink>
+            )}
           </>
         ) : (
           <>

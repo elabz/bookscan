@@ -116,7 +116,8 @@ export const getUserBooks = async (req: AuthRequest, res: Response) => {
       `SELECT b.*, ub.location_id,
               ub.cover_url as user_cover_url,
               ub.cover_small_url as user_cover_small_url,
-              ub.cover_large_url as user_cover_large_url
+              ub.cover_large_url as user_cover_large_url,
+              ub.overrides as user_overrides
        FROM books b
        INNER JOIN user_books ub ON b.id = ub.book_id
        WHERE ub.user_id = $1
@@ -161,6 +162,27 @@ export const searchUserBooks = async (req: AuthRequest, res: Response) => {
 export const getBookById = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const userId = req.session?.getUserId?.();
+
+    // If authenticated, join user_books to get personal overrides
+    if (userId) {
+      const result = await pool.query(
+        `SELECT b.*,
+                ub.cover_url as user_cover_url,
+                ub.cover_small_url as user_cover_small_url,
+                ub.cover_large_url as user_cover_large_url,
+                ub.overrides as user_overrides,
+                ub.location_id
+         FROM books b
+         LEFT JOIN user_books ub ON b.id = ub.book_id AND ub.user_id = $2
+         WHERE b.id = $1`,
+        [id, userId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Book not found' });
+      }
+      return res.json(result.rows[0]);
+    }
 
     const result = await pool.query('SELECT * FROM books WHERE id = $1', [id]);
 
@@ -367,7 +389,19 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
       return applyBookUpdate(id, filteredUpdates, res);
     }
 
-    // Non-admin editing content fields: queue for approval
+    // Non-admin editing content fields: save as personal overrides AND queue for approval
+    const textFields = Object.keys(filteredUpdates).filter(k => !coverFields.includes(k));
+    if (textFields.length > 0) {
+      const overrides: Record<string, any> = {};
+      for (const key of textFields) {
+        overrides[key] = filteredUpdates[key];
+      }
+      await pool.query(
+        `UPDATE user_books SET overrides = COALESCE(overrides, '{}'::jsonb) || $1::jsonb WHERE user_id = $2 AND book_id = $3`,
+        [JSON.stringify(overrides), userId, id]
+      );
+    }
+
     const result = await pool.query(
       `INSERT INTO pending_book_edits (book_id, user_id, changes)
        VALUES ($1, $2, $3) RETURNING *`,
@@ -376,7 +410,8 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
 
     return res.json({
       pending: true,
-      message: 'Your changes have been submitted for review',
+      personal: true,
+      message: 'Your changes are visible to you and have been submitted for review',
       edit: result.rows[0],
     });
   } catch (err) {
@@ -487,6 +522,27 @@ export const reviewEdit = async (req: AuthRequest, res: Response) => {
       if (bookResult.rows.length > 0) {
         indexBook(bookResult.rows[0]).catch((err) =>
           console.error(`Failed to re-index book ${edit.book_id}:`, err)
+        );
+      }
+
+      // Clear approved fields from user's personal overrides
+      const overrideKeys = Object.keys(changes);
+      const coverFields = ['cover_url', 'cover_small_url', 'cover_large_url'];
+      const textKeys = overrideKeys.filter(k => !coverFields.includes(k));
+      if (textKeys.length > 0) {
+        const removals = textKeys.map(k => `'${k}'`).join(', ');
+        await pool.query(
+          `UPDATE user_books SET overrides = overrides - ARRAY[${removals}]::text[]
+           WHERE user_id = $1 AND book_id = $2`,
+          [edit.user_id, edit.book_id]
+        );
+      }
+      // Clear cover overrides if they match
+      if (overrideKeys.some(k => coverFields.includes(k))) {
+        await pool.query(
+          `UPDATE user_books SET cover_url = NULL, cover_small_url = NULL, cover_large_url = NULL
+           WHERE user_id = $1 AND book_id = $2`,
+          [edit.user_id, edit.book_id]
         );
       }
     }

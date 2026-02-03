@@ -4,6 +4,7 @@ export interface AuthContextType {
   isSignedIn: boolean;
   userId: string | null;
   userEmail: string | null;
+  isAdmin: boolean;
   signOut: () => Promise<{ success?: boolean; error?: any }>;
   signIn: (email: string, password: string) => Promise<{ data?: any; error?: any }>;
   signInWithGoogle: () => Promise<void>;

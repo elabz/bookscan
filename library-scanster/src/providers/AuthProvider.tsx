@@ -5,11 +5,13 @@ import { redirectToThirdPartyLogin } from 'supertokens-auth-react/recipe/thirdpa
 import { AuthContext } from './AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { getProfile } from '@/services/profileService';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -20,17 +22,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const uid = await Session.getUserId();
         setIsSignedIn(true);
         setUserId(uid);
-        // Email isn't directly available from session; could fetch from backend if needed
-        setUserEmail(null);
+        try {
+          const profile = await getProfile();
+          setUserEmail(profile.email || null);
+          setIsAdmin(profile.is_admin === true);
+        } catch {
+          setUserEmail(null);
+          setIsAdmin(false);
+        }
       } else {
         setIsSignedIn(false);
         setUserId(null);
         setUserEmail(null);
+        setIsAdmin(false);
       }
     } catch {
       setIsSignedIn(false);
       setUserId(null);
       setUserEmail(null);
+      setIsAdmin(false);
     } finally {
       setIsLoading(false);
     }
@@ -107,6 +117,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSignedIn(false);
       setUserId(null);
       setUserEmail(null);
+      setIsAdmin(false);
       navigate('/');
       toast.success('Successfully signed out');
       return { success: true };
@@ -118,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ isSignedIn, userId, userEmail, signOut, signIn, signInWithGoogle, signUp, isLoading }}>
+    <AuthContext.Provider value={{ isSignedIn, userId, userEmail, isAdmin, signOut, signIn, signInWithGoogle, signUp, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

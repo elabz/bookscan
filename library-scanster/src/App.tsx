@@ -19,6 +19,7 @@ import AuthCallbackPage from "./pages/AuthCallbackPage";
 import DiscoverPage from "./pages/DiscoverPage";
 import ProfilePage from "./pages/ProfilePage";
 import LibrarySetupPage from "./pages/LibrarySetupPage";
+import AdminPage from "./pages/AdminPage";
 
 const App = () => (
   <TooltipProvider>
@@ -62,6 +63,11 @@ const App = () => (
         <Route path="/take-photo" element={
           <RequireAuth>
             <TakePhotoPage />
+          </RequireAuth>
+        } />
+        <Route path="/admin" element={
+          <RequireAuth>
+            <AdminPage />
           </RequireAuth>
         } />
         

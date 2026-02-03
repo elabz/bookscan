@@ -10,7 +10,7 @@ export const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const { isSignedIn, signOut, userEmail } = useAuth();
+  const { isSignedIn, signOut, userEmail, isAdmin } = useAuth();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -39,13 +39,14 @@ export const Navbar = () => {
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         <Logo />
         
-        <DesktopNav 
+        <DesktopNav
           isSignedIn={isSignedIn}
           userEmail={userEmail}
           signOut={signOut}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           handleSearch={handleSearch}
+          isAdmin={isAdmin}
         />
         
         {/* Mobile Menu Button */}
@@ -58,7 +59,7 @@ export const Navbar = () => {
         </button>
       </div>
       
-      <MobileMenu 
+      <MobileMenu
         isSignedIn={isSignedIn}
         userEmail={userEmail}
         signOut={signOut}
@@ -67,6 +68,7 @@ export const Navbar = () => {
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         handleSearch={handleSearch}
+        isAdmin={isAdmin}
       />
     </header>
   );

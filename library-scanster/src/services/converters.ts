@@ -33,21 +33,22 @@ export const bookToDbFormat = (book: Book) => {
 
 // Convert from DB row (snake_case) to our Book type
 export const dbBookToAppFormat = (book: any, genres?: Genre[]): Book => {
+  const ov = book.user_overrides || {};
   return {
     id: book.id,
-    title: book.title,
-    authors: book.authors,
+    title: ov.title || book.title,
+    authors: ov.authors || book.authors,
     isbn: book.isbn,
     cover: book.user_cover_url || book.cover_url,
     coverSmall: book.user_cover_small_url || book.cover_small_url,
     coverLarge: book.user_cover_large_url || book.cover_large_url,
-    publisher: book.publisher,
-    publishedDate: book.published_date,
-    description: book.description,
-    pageCount: book.page_count,
+    publisher: ov.publisher || book.publisher,
+    publishedDate: ov.published_date || book.published_date,
+    description: ov.description || book.description,
+    pageCount: ov.page_count || book.page_count,
     categories: book.categories,
-    language: book.language,
-    edition: book.edition,
+    language: ov.language || book.language,
+    edition: ov.edition || book.edition,
     width: book.width,
     height: book.height,
     genres: genres || [],

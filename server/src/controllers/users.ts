@@ -10,7 +10,7 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
 
     const result = await pool.query(
-      `SELECT id, email, display_name, avatar_url, username, bio, location, website, phone, reading_goal, created_at, updated_at
+      `SELECT id, email, display_name, avatar_url, username, bio, location, website, phone, reading_goal, is_admin, created_at, updated_at
        FROM users WHERE id = $1`,
       [userId]
     );

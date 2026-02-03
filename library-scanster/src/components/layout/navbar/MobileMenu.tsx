@@ -15,17 +15,19 @@ interface MobileMenuProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   handleSearch: (e: React.FormEvent) => void;
+  isAdmin?: boolean;
 }
 
 export const MobileMenu = ({ 
-  isSignedIn, 
-  userEmail, 
-  signOut, 
-  isOpen, 
+  isSignedIn,
+  userEmail,
+  signOut,
+  isOpen,
   setIsOpen,
   searchQuery,
   setSearchQuery,
-  handleSearch
+  handleSearch,
+  isAdmin,
 }: MobileMenuProps) => {
   const navigate = useNavigate();
 
@@ -49,6 +51,11 @@ export const MobileMenu = ({
             <NavLink to="/discover" onClick={() => setIsOpen(false)}>
               Discover
             </NavLink>
+            {isAdmin && (
+              <NavLink to="/admin" onClick={() => setIsOpen(false)}>
+                Admin
+              </NavLink>
+            )}
             <Button size="sm" variant="default" className="w-full" onClick={() => {
               navigate('/books/add');
               setIsOpen(false);
