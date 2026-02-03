@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { SessionRequest } from 'supertokens-node/framework/express';
+import supertokens from 'supertokens-node';
 import { pool } from '../config/db';
 
 type AuthRequest = SessionRequest;
@@ -16,12 +17,42 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      // Auto-create user record if missing
+      // Auto-create user record - fetch info from Supertokens first
+      let email = '';
+      let displayName = '';
+
+      try {
+        const userInfo = await supertokens.getUser(userId);
+        if (userInfo) {
+          // Get email from login methods (email/password or OAuth)
+          const loginMethod = userInfo.loginMethods?.[0];
+          if (loginMethod?.email) {
+            email = loginMethod.email;
+          }
+          // Try to get name from thirdParty info if available
+          if (loginMethod?.thirdParty) {
+            // For Google, we can derive display name from email
+            displayName = email.split('@')[0];
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch user info from Supertokens:', e);
+      }
+
+      // Derive username from email (first part before @)
+      const username = email ? email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+
       const insert = await pool.query(
-        `INSERT INTO users (id, email) VALUES ($1, '') ON CONFLICT (id) DO NOTHING RETURNING *`,
-        [userId]
+        `INSERT INTO users (id, email, display_name, username)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (id) DO UPDATE SET
+           email = COALESCE(NULLIF(users.email, ''), EXCLUDED.email),
+           display_name = COALESCE(NULLIF(users.display_name, ''), EXCLUDED.display_name),
+           username = COALESCE(NULLIF(users.username, ''), EXCLUDED.username)
+         RETURNING *`,
+        [userId, email, displayName, username]
       );
-      return res.json(insert.rows[0] || { id: userId });
+      return res.json(insert.rows[0] || { id: userId, email, display_name: displayName, username });
     }
 
     return res.json(result.rows[0]);

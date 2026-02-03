@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Camera } from 'lucide-react';
+import { Camera, Upload } from 'lucide-react';
 import { processAndUploadImage } from '@/services/imageService';
 
 interface AvatarUploadProps {
@@ -14,6 +14,7 @@ interface AvatarUploadProps {
 export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: AvatarUploadProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const initials = (displayName || email || 'U').substring(0, 2).toUpperCase();
 
@@ -29,6 +30,9 @@ export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: 
       console.error('Error uploading avatar:', error);
     } finally {
       setIsUploading(false);
+      // Reset inputs so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -38,6 +42,7 @@ export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: 
         <AvatarImage src={avatarUrl} alt={displayName || 'Avatar'} />
         <AvatarFallback className="text-2xl">{initials}</AvatarFallback>
       </Avatar>
+      {/* File upload input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -45,15 +50,35 @@ export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: 
         className="hidden"
         onChange={handleFileSelect}
       />
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={isUploading}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <Camera className="mr-2 h-4 w-4" />
-        {isUploading ? 'Uploading...' : 'Change Photo'}
-      </Button>
+      {/* Camera capture input */}
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isUploading}
+          onClick={() => cameraInputRef.current?.click()}
+        >
+          <Camera className="mr-2 h-4 w-4" />
+          {isUploading ? 'Uploading...' : 'Take Photo'}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isUploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="mr-2 h-4 w-4" />
+          Upload
+        </Button>
+      </div>
     </div>
   );
 };
