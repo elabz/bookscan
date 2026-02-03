@@ -18,6 +18,12 @@ export default defineConfig(({ mode }) => ({
       '/auth': {
         target: 'http://allmybooks-backend:4001',
         changeOrigin: true,
+        bypass: (req) => {
+          // Don't proxy OAuth callback routes - let React Router handle them
+          if (req.url?.startsWith('/auth/callback')) {
+            return req.url;
+          }
+        },
       },
     },
   },
