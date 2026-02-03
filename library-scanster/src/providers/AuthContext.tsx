@@ -9,6 +9,7 @@ export interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ data?: any; error?: any }>;
   signInWithGoogle: () => Promise<void>;
   signUp: (email: string, password: string) => Promise<{ data?: any; error?: any }>;
+  refreshSession: () => Promise<void>;
   isLoading: boolean;
 }
 

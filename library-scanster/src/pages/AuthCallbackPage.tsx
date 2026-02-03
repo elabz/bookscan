@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { signInAndUp } from 'supertokens-auth-react/recipe/thirdparty';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 
 const AuthCallbackPage = () => {
   const navigate = useNavigate();
+  const { refreshSession } = useAuth();
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -13,6 +15,7 @@ const AuthCallbackPage = () => {
         const response = await signInAndUp();
 
         if (response.status === 'OK') {
+          await refreshSession();
           toast.success('Successfully signed in!');
           navigate('/library');
         } else if (response.status === 'NO_EMAIL_GIVEN_BY_PROVIDER') {
