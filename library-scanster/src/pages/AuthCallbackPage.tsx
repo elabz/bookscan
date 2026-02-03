@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { thirdPartySignInAndUp } from 'supertokens-auth-react/recipe/thirdparty';
+import { signInAndUp } from 'supertokens-auth-react/recipe/thirdparty';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { toast } from 'sonner';
 
@@ -10,7 +10,7 @@ const AuthCallbackPage = () => {
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        const response = await thirdPartySignInAndUp();
+        const response = await signInAndUp();
 
         if (response.status === 'OK') {
           toast.success('Successfully signed in!');
