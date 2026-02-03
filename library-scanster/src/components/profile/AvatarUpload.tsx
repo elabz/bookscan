@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Camera, Upload, X } from 'lucide-react';
@@ -45,9 +45,6 @@ export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: 
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } }
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       setShowCamera(true);
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -55,6 +52,13 @@ export const AvatarUpload = ({ avatarUrl, displayName, email, onAvatarChange }: 
       fileInputRef.current?.click();
     }
   }, []);
+
+  // Attach stream to video element after it renders
+  useEffect(() => {
+    if (showCamera && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [showCamera]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
