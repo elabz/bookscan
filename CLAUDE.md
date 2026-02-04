@@ -42,9 +42,11 @@ npm run dev          # ts-node dev
 
 ### Docker (full stack)
 ```bash
-docker-compose up --build       # start all services
-docker-compose logs -f backend  # view backend logs
+docker compose up --build       # start all services
+docker compose logs -f backend  # view backend logs
 ```
+
+**Note**: Always use `docker compose` (space, not hyphen) for Docker commands.
 
 ## Database Migrations
 

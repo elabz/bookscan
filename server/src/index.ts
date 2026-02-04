@@ -13,6 +13,7 @@ import { userRoutes } from './routes/users';
 import { locationRoutes } from './routes/locations';
 import { collectionRoutes } from './routes/collections';
 import { createBooksIndex } from './config/elasticsearch';
+import { pool } from './config/db';
 
 dotenv.config();
 
@@ -38,6 +39,28 @@ app.use('/search', searchRoutes);
 app.use('/users', userRoutes);
 app.use('/locations', locationRoutes);
 app.use('/collections', collectionRoutes);
+
+// Contact form endpoint
+app.post('/contact', async (req, res): Promise<void> => {
+  try {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !message) {
+      res.status(400).json({ error: 'Name, email, and message are required' });
+      return;
+    }
+
+    await pool.query(
+      `INSERT INTO contact_messages (name, email, subject, message) VALUES ($1, $2, $3, $4)`,
+      [name, email, subject || null, message]
+    );
+
+    res.json({ success: true, message: 'Message sent successfully' });
+  } catch (error) {
+    console.error('Contact form error:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
 
 // Error handling
 app.use(errorHandler());
