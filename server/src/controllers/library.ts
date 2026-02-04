@@ -234,11 +234,14 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
         `INSERT INTO books (
           id, title, authors, isbn, cover_url, cover_small_url, cover_large_url,
           publisher, published_date, description, page_count, categories, language,
-          edition, width, height, identifiers, classifications, links, weight,
-          url, subjects, publish_places, excerpts, number_of_pages, created_at, updated_at
+          edition, width, height, depth, dimension_unit, weight_unit,
+          identifiers, classifications, links, weight,
+          url, subjects, publish_places, excerpts, number_of_pages,
+          price, price_published, price_currency, created_at, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-          $17, $18, $19, $20, $21, $22, $23, $24, $25, NOW(), NOW()
+          $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
+          NOW(), NOW()
         ) RETURNING *`,
         [
           id, book.title, JSON.stringify(book.authors), book.isbn || null,
@@ -246,6 +249,7 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
           book.publisher || null, book.published_date || null, book.description || null,
           book.page_count || null, book.categories ? JSON.stringify(book.categories) : null,
           book.language || null, book.edition || null, book.width || null, book.height || null,
+          book.depth || null, book.dimension_unit || null, book.weight_unit || null,
           book.identifiers ? JSON.stringify(book.identifiers) : null,
           book.classifications ? JSON.stringify(book.classifications) : null,
           book.links ? JSON.stringify(book.links) : null,
@@ -254,6 +258,7 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
           book.publish_places ? JSON.stringify(book.publish_places) : null,
           book.excerpts ? JSON.stringify(book.excerpts) : null,
           book.number_of_pages || null,
+          book.price || null, book.price_published || null, book.price_currency || null,
         ]
       );
       bookId = result.rows[0].id;
@@ -343,6 +348,8 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
     const allowedFields = [
       'title', 'authors', 'isbn', 'publisher', 'published_date',
       'description', 'page_count', 'language', 'edition', 'width', 'height',
+      'depth', 'dimension_unit', 'weight_unit', 'weight',
+      'price', 'price_published', 'price_currency',
       'cover_url', 'cover_small_url', 'cover_large_url',
     ];
 
@@ -662,10 +669,29 @@ export const deleteBookImage = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
     const { id: bookId, imageId } = req.params;
 
+    // Get the image URLs before deleting
+    const imageResult = await pool.query(
+      'SELECT url, url_small, url_large FROM book_images WHERE id = $1 AND book_id = $2 AND user_id = $3',
+      [imageId, bookId, userId]
+    );
+
+    if (imageResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const image = imageResult.rows[0];
+
+    // Delete from database
     await pool.query(
       'DELETE FROM book_images WHERE id = $1 AND book_id = $2 AND user_id = $3',
       [imageId, bookId, userId]
     );
+
+    // Delete from CDN (best effort, don't fail if CDN delete fails)
+    const { deleteFromCDN } = await import('../services/imageProcessor');
+    const urlsToDelete = [image.url, image.url_small, image.url_large].filter(Boolean);
+    await Promise.all(urlsToDelete.map(url => deleteFromCDN(url)));
+
     return res.json({ success: true });
   } catch (err) {
     console.error('Error deleting book image:', err);
@@ -679,10 +705,19 @@ export const setImageAsCover = async (req: AuthRequest, res: Response) => {
     const userId = req.session!.getUserId();
     const { id: bookId, imageId } = req.params;
 
-    // Get the image
+    // Check user has this book in their library
+    const userBookCheck = await pool.query(
+      'SELECT 1 FROM user_books WHERE user_id = $1 AND book_id = $2',
+      [userId, bookId]
+    );
+    if (userBookCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Book not in your library' });
+    }
+
+    // Get the image (any user's image for this book)
     const imageResult = await pool.query(
-      'SELECT * FROM book_images WHERE id = $1 AND book_id = $2 AND user_id = $3',
-      [imageId, bookId, userId]
+      'SELECT * FROM book_images WHERE id = $1 AND book_id = $2',
+      [imageId, bookId]
     );
     if (imageResult.rows.length === 0) {
       return res.status(404).json({ error: 'Image not found' });

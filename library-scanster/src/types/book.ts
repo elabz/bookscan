@@ -63,8 +63,14 @@ export interface Book {
   addedByUserId?: string;
   createdAt?: string;
   updatedAt?: string;
-  width?: string;          // Book width (new field)
-  height?: string;         // Book height (new field)
+  width?: string;          // Book width
+  height?: string;         // Book height
+  depth?: string;          // Book depth/thickness
+  dimensionUnit?: 'mm' | 'cm' | 'in';  // Unit for width/height/depth
+  weightUnit?: 'g' | 'kg' | 'lb' | 'oz'; // Unit for weight
+  price?: string;          // Current/selling price
+  pricePublished?: string; // Original published/list price
+  priceCurrency?: string;  // Currency code: USD, EUR, GBP, etc.
   // OpenLibrary fields
   identifiers?: Identifier;
   classifications?: Classification;
