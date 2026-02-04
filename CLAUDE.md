@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-BookScan is a personal library management system with ISBN barcode scanning, cover image OCR, and semantic vector search. It has two separate frontend implementations and a shared Docker infrastructure.
+BookScan is a personal library management system with ISBN barcode scanning, cover image OCR, and semantic vector search.
 
 ## Architecture
 
 The system uses a unified stack:
 
-- **Server**: Express.js API with Supertokens auth, direct PostgreSQL (with pgvector), Redis caching, Ollama embeddings, Elasticsearch hybrid search, and a separate OCR worker service. Orchestrated via `docker-compose.yml`.
+- **Server**: Express.js API with Supertokens auth, PostgreSQL (with pgvector), Ollama embeddings, and Elasticsearch hybrid search. Orchestrated via `docker-compose.yml`.
 - **Frontend (library-scanster)**: Vite + React + Shadcn/ui + TailwindCSS. Uses Supertokens for auth and the Express server as the backend.
 - **Image CDN**: Bunny.net CDN for cover images and book photos.
 

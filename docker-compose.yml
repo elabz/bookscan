@@ -29,7 +29,6 @@ services:
       - PORT=4001
       - NODE_ENV=development
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379
       - OLLAMA_URL=http://ollama:11434
       - SUPERTOKENS_CONNECTION_URI=http://supertokens:3567
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY}
@@ -48,7 +47,6 @@ services:
       - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL}
     depends_on:
       - postgres
-      - redis
       - supertokens
     networks:
       - bookscan-net
@@ -72,17 +70,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    networks:
-      - bookscan-net
-
-  redis:
-    container_name: bookscan-redis
-    image: redis:7
-    volumes:
-      - redis-data:/data
-    command: redis-server --save 60 1 --loglevel warning
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
     networks:
       - bookscan-net
 
@@ -126,5 +113,4 @@ networks:
 
 volumes:
   postgres-data:
-  redis-data:
   ollama-data:

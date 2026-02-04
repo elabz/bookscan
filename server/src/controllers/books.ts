@@ -3,7 +3,6 @@ import { SessionRequest } from 'supertokens-node/framework/express';
 import axios from 'axios';
 import { createWorker } from 'tesseract.js';
 import { pool } from '../config/db';
-import { redis } from '../config/redis';
 
 type AuthRequest = Request & SessionRequest;
 
@@ -12,13 +11,7 @@ export const scanISBN = async (req: AuthRequest, res: Response) => {
     const { isbn } = req.body;
     const userId = req.session!.getUserId();
 
-    // Check cache first
-    const cachedBook = await redis.get(`book:${isbn}`);
-    if (cachedBook) {
-      return res.json(JSON.parse(cachedBook));
-    }
-
-    // Check database
+    // Check database first
     const existingBook = await pool.query(
       'SELECT * FROM books WHERE isbn = $1',
       [isbn]
@@ -30,10 +23,7 @@ export const scanISBN = async (req: AuthRequest, res: Response) => {
         'INSERT INTO user_books (user_id, book_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
         [userId, existingBook.rows[0].id]
       );
-      
-      // Cache the result
-      await redis.set(`book:${isbn}`, JSON.stringify(existingBook.rows[0]));
-      
+
       return res.json(existingBook.rows[0]);
     }
 
@@ -52,9 +42,6 @@ export const scanISBN = async (req: AuthRequest, res: Response) => {
       'INSERT INTO user_books (user_id, book_id) VALUES ($1, $2)',
       [userId, newBook.rows[0].id]
     );
-
-    // Cache the result
-    await redis.set(`book:${isbn}`, JSON.stringify(newBook.rows[0]));
 
     return res.json(newBook.rows[0]);
   } catch (err) {
