@@ -262,94 +262,143 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
   // Book found view
   return (
     <div className="animate-slide-up">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-medium">Book Found!</h2>
-          <button
-            type="button"
-            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-            onClick={() => setShowWrongBook(!showWrongBook)}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-8 overflow-hidden">
+        {/* Header: Cover + Title + Add Button */}
+        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/5 to-transparent border-b">
+          {/* Cover thumbnail */}
+          <div className="shrink-0 w-20 h-28 rounded-md overflow-hidden bg-muted shadow-md">
+            {foundBook!.cover ? (
+              <img
+                src={foundBook!.cover}
+                alt={foundBook!.title}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <BookPlus className="h-8 w-8 text-muted-foreground/50" />
+              </div>
+            )}
+          </div>
+
+          {/* Title + Author */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-semibold truncate">{foundBook!.title}</h2>
+            <p className="text-sm text-muted-foreground truncate">
+              {foundBook!.authors?.join(', ') || 'Unknown Author'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 font-mono">
+              {foundBook!.isbn}
+            </p>
+          </div>
+
+          {/* Add Button - prominent */}
+          <Button
+            ref={addButtonRef}
+            onClick={handleAddAndScanAnother}
+            disabled={isSubmitting}
+            size="lg"
+            className="shrink-0"
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Not this book?
-          </button>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <Scan className="mr-2 h-5 w-5" />
+                Add & Scan
+              </>
+            )}
+          </Button>
         </div>
 
-        {showWrongBook && (
-          <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
-            <p className="text-sm text-muted-foreground mb-2">
-              Search by title or enter a different ISBN:
-            </p>
-            <form onSubmit={handleWrongBookSearch} className="flex gap-2">
-              <input
-                type="text"
-                value={wrongBookQuery}
-                onChange={(e) => setWrongBookQuery(e.target.value)}
-                placeholder='e.g. "The Great Gatsby" or 978-0-743-27356-5'
-                className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
-                autoFocus
-              />
-              <Button type="submit" size="sm" disabled={!wrongBookQuery.trim()}>
-                <Search className="mr-1 h-3 w-3" /> Search
-              </Button>
-            </form>
+        {/* Scan hints */}
+        <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300">
+          <strong>Same barcode</strong> = add this book &nbsp;|&nbsp; <strong>Different barcode</strong> = search new book
+        </div>
+
+        {/* Main content */}
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-muted-foreground">Book Details</h3>
             <button
               type="button"
-              className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-              onClick={resetScanState}
+              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+              onClick={() => setShowWrongBook(!showWrongBook)}
             >
-              or scan a different barcode
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Not this book?
             </button>
           </div>
-        )}
 
-        <EditableBookForm book={foundBook!} onChange={handleBookFormChange} />
-
-        {/* Scan hint */}
-        <div className="mt-4 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            <Scan className="inline h-4 w-4 mr-1" />
-            <strong>Quick add:</strong> Scan the same barcode again to add this book and continue scanning
-          </p>
-        </div>
-
-        {/* Bottom actions + location */}
-        <div className="mt-6 pt-4 border-t space-y-3">
-          {onLocationChange && (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <span className="shrink-0">Location:</span>
-              <LocationPicker
-                value={selectedLocationId ?? null}
-                onChange={onLocationChange}
-              />
+          {showWrongBook && (
+            <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
+              <p className="text-sm text-muted-foreground mb-2">
+                Search by title or enter a different ISBN:
+              </p>
+              <form onSubmit={handleWrongBookSearch} className="flex gap-2">
+                <input
+                  type="text"
+                  value={wrongBookQuery}
+                  onChange={(e) => setWrongBookQuery(e.target.value)}
+                  placeholder='e.g. "The Great Gatsby" or 978-0-743-27356-5'
+                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  autoFocus
+                />
+                <Button type="submit" size="sm" disabled={!wrongBookQuery.trim()}>
+                  <Search className="mr-1 h-3 w-3" /> Search
+                </Button>
+              </form>
+              <button
+                type="button"
+                className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={resetScanState}
+              >
+                or scan a different barcode
+              </button>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              ref={addButtonRef}
-              onClick={handleAddAndScanAnother}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Adding...
-                </>
-              ) : (
-                <>
-                  <Scan className="mr-2 h-4 w-4" />
-                  Add & Scan Another
-                </>
-              )}
-            </Button>
-            <Button
-              onClick={handleAddScannedBook}
-              variant="outline"
-              disabled={isSubmitting}
-            >
-              <BookPlus className="mr-2 h-4 w-4" />
-              Add to Library
-            </Button>
+
+          <EditableBookForm book={foundBook!} onChange={handleBookFormChange} />
+
+          {/* Bottom actions + location */}
+          <div className="mt-6 pt-4 border-t space-y-3">
+            {onLocationChange && (
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span className="shrink-0">Location:</span>
+                <LocationPicker
+                  value={selectedLocationId ?? null}
+                  onChange={onLocationChange}
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={handleAddAndScanAnother}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  <>
+                    <Scan className="mr-2 h-4 w-4" />
+                    Add & Scan Another
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleAddScannedBook}
+                variant="outline"
+                disabled={isSubmitting}
+              >
+                <BookPlus className="mr-2 h-4 w-4" />
+                Add to Library
+              </Button>
+            </div>
           </div>
         </div>
       </div>
