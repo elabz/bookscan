@@ -3,6 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Scan } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { NavLink } from './NavLink';
 import { SearchBar } from './SearchBar';
 import { UserMenu } from './UserMenu';
@@ -66,10 +67,17 @@ export const DesktopNav = ({
               handleSearch={handleSearch}
               className="w-64"
             />
-            <Button size="sm" variant="default" onClick={() => navigate('/books/add')}>
-              <Scan className="h-4 w-4 mr-1" />
-              Add / Scan
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="default" onClick={() => navigate('/books/add')}>
+                  <Scan className="h-4 w-4 mr-1" />
+                  Add / Scan
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                Add a Book to Your Library
+              </TooltipContent>
+            </Tooltip>
             <UserMenu userEmail={userEmail} signOut={signOut} />
           </>
         ) : (

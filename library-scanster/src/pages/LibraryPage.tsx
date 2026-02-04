@@ -7,10 +7,9 @@ import { BookSearch } from '@/components/books/BookSearch';
 import { GenreFilter } from '@/components/books/GenreFilter';
 import { LibraryStats } from '@/components/library/LibraryStats';
 import { LibraryFilters } from '@/components/library/LibraryFilters';
-import { Button } from '@/components/ui/button';
 import { Book as BookType } from '@/types/book';
-import { BookPlus, X } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { getUserBooks, searchUserBooks } from '@/services/libraryService';
@@ -151,20 +150,11 @@ const LibraryPage = () => {
     <PageLayout>
       <div className="max-w-7xl mx-auto px-6">
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 md:p-8 shadow-sm mb-8 mt-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold mb-2">My Library</h1>
-              <p className="text-muted-foreground">
-                {books.length} book{books.length !== 1 ? 's' : ''} in your collection
-              </p>
-            </div>
-
-            <Button asChild>
-              <Link to="/books/add">
-                <BookPlus className="h-4 w-4 mr-2" />
-                Add Book
-              </Link>
-            </Button>
+          <div className="mb-6">
+            <h1 className="text-2xl md:text-3xl font-bold mb-2">My Library</h1>
+            <p className="text-muted-foreground">
+              {books.length} book{books.length !== 1 ? 's' : ''} in your collection
+            </p>
           </div>
 
           <div className="flex flex-col md:flex-row gap-4 mb-6">
