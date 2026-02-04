@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { BookCover } from '@/components/books/BookCover';
 import { BookMetadata } from '@/components/books/BookMetadata';
@@ -17,7 +17,7 @@ import { BookSecondaryActions } from '@/components/books/BookSecondaryActions';
 import { BookImageGallery } from '@/components/books/BookImageGallery';
 import { BookEditor } from '@/components/scan/BookEditor';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getUserBooks, getBookByIdPublic } from '@/services/libraryService';
+import { getUserBooks, getBookById, getBookByIdPublic } from '@/services/libraryService';
 import { updateBookDetails } from '@/services/bookOperations';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -29,15 +29,24 @@ import { Book } from '@/types/book';
 import { LocationPicker } from '@/components/library/LocationPicker';
 import { updateBookLocation } from '@/services/locationService';
 
+interface LocationState {
+  book?: Book;
+}
+
 const BookDetailsPage = () => {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { userId, isSignedIn } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isInLibrary, setIsInLibrary] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [bookLocationId, setBookLocationId] = useState<string | null>(null);
+
+  // Check if book data was passed via navigation state (for external sources like OpenLibrary)
+  const stateBook = (location.state as LocationState)?.book;
+  const isExternalBook = !!stateBook;
 
   // Fetch user's books only if authenticated
   const { data: userBooks = [] } = useQuery({
@@ -46,12 +55,15 @@ const BookDetailsPage = () => {
     enabled: !!userId
   });
 
-  // Fetch book details publicly (no auth needed)
-  const { data: book, isLoading, error } = useQuery({
-    queryKey: ['book', id],
-    queryFn: () => getBookByIdPublic(id),
-    enabled: !!id
+  // Fetch book details - use authenticated endpoint if signed in for user-specific overrides
+  const { data: fetchedBook, isLoading, error } = useQuery({
+    queryKey: ['book', id, isSignedIn],
+    queryFn: () => isSignedIn ? getBookById(id) : getBookByIdPublic(id),
+    enabled: !!id && !isExternalBook
   });
+
+  // Use state book if available, otherwise use fetched book
+  const book = stateBook || fetchedBook;
 
   useEffect(() => {
     if (book && userBooks.length > 0) {
@@ -61,7 +73,7 @@ const BookDetailsPage = () => {
     }
   }, [book, userBooks]);
 
-  if (isLoading) {
+  if (isLoading && !isExternalBook) {
     return (
       <PageLayout>
         <BookDetailsSkeleton />
@@ -80,6 +92,17 @@ const BookDetailsPage = () => {
     } catch (error) {
       console.error('Error updating book:', error);
       toast({ title: 'Update failed', description: 'Please try again', variant: 'destructive' });
+    }
+  };
+
+  const handleLibraryStatusChange = (newBookId?: string) => {
+    queryClient.invalidateQueries({ queryKey: ['userBooks'] });
+    // If we added an external book, navigate to the new database book
+    if (isExternalBook && newBookId) {
+      navigate(`/books/${newBookId}`, { replace: true });
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['book', id] });
+      setIsInLibrary(!isInLibrary);
     }
   };
 
@@ -129,7 +152,7 @@ const BookDetailsPage = () => {
                       }}
                     />
                   )}
-                  <BookActions book={book} isInLibrary={isInLibrary} onEditClick={() => setIsEditOpen(true)} />
+                  <BookActions book={book} isInLibrary={isInLibrary} onEditClick={() => setIsEditOpen(true)} onLibraryStatusChange={handleLibraryStatusChange} />
                   <BookSecondaryActions />
                 </>
               ) : (
@@ -152,11 +175,9 @@ const BookDetailsPage = () => {
               <BookMetadata book={book} />
             </div>
 
-            {book.description && (
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-primary/10">
-                <BookDescription description={book.description} />
-              </div>
-            )}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-primary/10">
+              <BookDescription description={book.description} showPlaceholder={isSignedIn && isInLibrary} />
+            </div>
 
             {isSignedIn && isInLibrary && book.id && (
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-primary/10">

@@ -17,6 +17,7 @@ interface ScannerInitOptions {
 let barcodeDetectorRAF: number | null = null;
 let barcodeDetectorVideo: HTMLVideoElement | null = null;
 let barcodeDetectorStream: MediaStream | null = null;
+let barcodeDetectorCancelled = false;
 
 const supportsNativeBarcodeDetector = (): boolean =>
   'BarcodeDetector' in window;
@@ -30,6 +31,9 @@ const initNativeBarcodeScanner = async ({
   onInitSuccess,
   onRejected,
 }: ScannerInitOptions): Promise<void> => {
+  // Reset cancellation flag at start
+  barcodeDetectorCancelled = false;
+
   try {
     const BD = (window as any).BarcodeDetector;
     const detector = new BD({
@@ -46,6 +50,13 @@ const initNativeBarcodeScanner = async ({
         height: { ideal: height },
       },
     });
+
+    // Check if cancelled while waiting for getUserMedia
+    if (barcodeDetectorCancelled) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
     barcodeDetectorStream = stream;
 
     // Create or reuse video element
@@ -61,16 +72,29 @@ const initNativeBarcodeScanner = async ({
       targetElement.appendChild(video);
     }
     video.srcObject = stream;
+
+    // Check if cancelled before play
+    if (barcodeDetectorCancelled) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
     await video.play();
+
+    // Check if cancelled after play
+    if (barcodeDetectorCancelled) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
     barcodeDetectorVideo = video;
 
     console.log(`[BarcodeDetector] Initialized with video ${video.videoWidth}x${video.videoHeight}`);
     onInitSuccess();
 
     // Scan loop
-    let scanning = true;
     const scanFrame = async () => {
-      if (!scanning || !barcodeDetectorVideo) return;
+      if (barcodeDetectorCancelled || !barcodeDetectorVideo) return;
       try {
         const barcodes = await detector.detect(barcodeDetectorVideo);
         // Signal that a frame was processed (for progress UI)
@@ -85,18 +109,26 @@ const initNativeBarcodeScanner = async ({
       } catch {
         // detect() can throw on some frames — ignore
       }
-      if (scanning) {
+      if (!barcodeDetectorCancelled) {
         barcodeDetectorRAF = requestAnimationFrame(scanFrame);
       }
     };
     barcodeDetectorRAF = requestAnimationFrame(scanFrame);
-  } catch (error) {
+  } catch (error: any) {
+    // Ignore AbortError from play() interruption (React StrictMode race)
+    if (error?.name === 'AbortError') {
+      console.log('[BarcodeDetector] Init aborted (likely StrictMode remount)');
+      return;
+    }
     console.error('[BarcodeDetector] Init error:', error);
     onInitError(error);
   }
 };
 
 const stopNativeBarcodeScanner = () => {
+  // Set cancellation flag first to stop any in-flight init
+  barcodeDetectorCancelled = true;
+
   if (barcodeDetectorRAF !== null) {
     cancelAnimationFrame(barcodeDetectorRAF);
     barcodeDetectorRAF = null;

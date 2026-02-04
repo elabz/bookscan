@@ -9,22 +9,37 @@ import { LibraryStats } from '@/components/library/LibraryStats';
 import { LibraryFilters } from '@/components/library/LibraryFilters';
 import { Button } from '@/components/ui/button';
 import { Book as BookType } from '@/types/book';
-import { BookPlus } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BookPlus, X } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { getUserBooks, searchUserBooks } from '@/services/libraryService';
 import { useToast } from '@/hooks/use-toast';
 import { getAllGenres, getBookGenres } from '@/services/genreService';
+import { Badge } from '@/components/ui/badge';
 
 const LibraryPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const { userId, isSignedIn } = useAuth();
   const { toast } = useToast();
+
+  // Read subject filter from URL
+  useEffect(() => {
+    const subject = searchParams.get('subject');
+    setSelectedSubject(subject);
+  }, [searchParams]);
+
+  const clearSubjectFilter = () => {
+    setSelectedSubject(null);
+    searchParams.delete('subject');
+    setSearchParams(searchParams);
+  };
 
   // Fetch all available genres
   const {
@@ -84,8 +99,17 @@ const LibraryPage = () => {
       );
     }
 
+    // Filter by subject if selected - use exact match (case-insensitive, trimmed)
+    if (selectedSubject) {
+      const normalizedSubject = selectedSubject.trim().toLowerCase();
+      result = result.filter(book =>
+        book.subjects?.some(s => s.name.trim().toLowerCase() === normalizedSubject) ||
+        book.categories?.some(c => c.trim().toLowerCase() === normalizedSubject)
+      );
+    }
+
     return result;
-  }, [books, filteredBooks, isSearching, selectedGenres]);
+  }, [books, filteredBooks, isSearching, selectedGenres, selectedSubject]);
 
   const handleSearch = async (query: string) => {
     if (!query.trim()) {
@@ -165,6 +189,23 @@ const LibraryPage = () => {
             onLocationChange={setSelectedLocationId}
             onCollectionChange={setSelectedCollectionId}
           />
+
+          {/* Active subject filter */}
+          {selectedSubject && (
+            <div className="mt-4 flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Filtered by subject:</span>
+              <Badge variant="secondary" className="flex items-center gap-1 pr-1">
+                {selectedSubject}
+                <button
+                  onClick={clearSubjectFilter}
+                  className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                  aria-label="Clear subject filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            </div>
+          )}
         </div>
 
         <LibraryStats />
@@ -176,9 +217,11 @@ const LibraryPage = () => {
             emptyMessage={
               searchQuery
                 ? `No books found matching "${searchQuery}"`
-                : selectedGenres.length > 0
-                  ? "No books found for the selected genres"
-                  : "Your library is empty. Start by adding some books!"
+                : selectedSubject
+                  ? `No books found with subject "${selectedSubject}"`
+                  : selectedGenres.length > 0
+                    ? "No books found for the selected genres"
+                    : "Your library is empty. Start by adding some books!"
             }
           />
         </div>
