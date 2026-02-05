@@ -9,6 +9,9 @@ jest.mock('../../services/imageProcessor', () => ({
     cover_large_url: 'http://cdn/L.webp',
   }),
   uploadBufferToCDN: jest.fn().mockResolvedValue('http://cdn/test.webp'),
+  deleteFromCDN: jest.fn().mockResolvedValue(undefined),
+  processAndUploadAvatar: jest.fn().mockResolvedValue('http://cdn/avatar.webp'),
+  CDN_PATHS: { covers: 'covers', userCovers: 'user-covers', avatars: 'avatars' },
 }));
 jest.mock('sharp', () => {
   const mockSharp = jest.fn(() => ({

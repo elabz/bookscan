@@ -11,6 +11,8 @@ jest.mock('../../services/imageProcessor', () => ({
     cover_small_url: 'http://cdn/cover-S.webp',
     cover_large_url: 'http://cdn/cover-L.webp',
   }),
+  deleteFromCDN: jest.fn().mockResolvedValue(undefined),
+  CDN_PATHS: { covers: 'covers', userCovers: 'user-covers', avatars: 'avatars' },
 }));
 jest.mock('../../services/searchService', () => ({
   indexBook: jest.fn().mockResolvedValue(undefined),
@@ -199,6 +201,7 @@ describe('library controller', () => {
     it('queues edit for non-admin user', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{}] }); // ownership
       mockQuery.mockResolvedValueOnce({ rows: [{ is_admin: false }] }); // admin check
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // UPDATE user_books (personal overrides)
       mockQuery.mockResolvedValueOnce({ rows: [{ id: 'edit-1' }] }); // INSERT pending_book_edits
       const res = mockRes();
       await updateBook(mockReq({ params: { id: 'b1' }, body: { title: 'New Title' } }), res);
@@ -275,8 +278,16 @@ describe('library controller', () => {
   });
 
   describe('deleteBookImage', () => {
+    it('returns 404 when image not found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // SELECT returns nothing
+      const res = mockRes();
+      await deleteBookImage(mockReq({ params: { id: 'b1', imageId: 'img1' } }), res);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
+
     it('deletes image', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [{ url: 'http://cdn/img.webp', url_small: null, url_large: null }] }); // SELECT image
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // DELETE
       const res = mockRes();
       await deleteBookImage(mockReq({ params: { id: 'b1', imageId: 'img1' } }), res);
       expect(res.json).toHaveBeenCalledWith({ success: true });

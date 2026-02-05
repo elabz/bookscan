@@ -3,31 +3,25 @@ services:
     container_name: allmybooks-frontend
     build:
       context: ./library-scanster
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     ports:
-      - "8100:8100"
-    volumes:
-      - ./library-scanster:/app
-      - /app/node_modules
+      - "8100:80"
     depends_on:
       - backend
     networks:
       - bookscan-net
-      - laradock_frontend
+    restart: unless-stopped
 
   backend:
     container_name: allmybooks-backend
     build:
       context: ./server
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     ports:
       - "4001:4001"
-    volumes:
-      - ./server:/app
-      - /app/node_modules
     environment:
       - PORT=${PORT:-4001}
-      - NODE_ENV=${NODE_ENV:-development}
+      - NODE_ENV=production
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - SUPERTOKENS_CONNECTION_URI=${SUPERTOKENS_CONNECTION_URI:-http://supertokens:3567}
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY}
@@ -45,18 +39,18 @@ services:
       - EMBEDDINGS_URL=${EMBEDDINGS_URL}
       - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL}
     depends_on:
-      - postgres
-      - supertokens
+      postgres:
+        condition: service_healthy
+      supertokens:
+        condition: service_started
     networks:
       - bookscan-net
-      - laradock_frontend
       - laradock_backend
+    restart: unless-stopped
 
   postgres:
     container_name: bookscan-postgres
     image: pgvector/pgvector:pg15
-    ports:
-      - "5432:5432"
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -66,11 +60,12 @@ services:
     command: postgres -c 'shared_preload_libraries=vector'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - bookscan-net
+    restart: unless-stopped
 
   supertokens:
     container_name: bookscan-supertokens
@@ -84,15 +79,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "3567:3567"
     networks:
       - bookscan-net
+    restart: unless-stopped
 
 networks:
   bookscan-net:
-  laradock_frontend:
-    external: true
   laradock_backend:
     external: true
 

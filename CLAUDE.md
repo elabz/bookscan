@@ -10,7 +10,7 @@ BookScan is a personal library management system with ISBN barcode scanning, cov
 
 The system uses a unified stack:
 
-- **Server**: Express.js API with Supertokens auth, PostgreSQL (with pgvector), Ollama embeddings, and Elasticsearch hybrid search. Orchestrated via `docker-compose.yml`.
+- **Server**: Express.js API with Supertokens auth, PostgreSQL (with pgvector), LiteLLM embeddings, and Elasticsearch hybrid search. Orchestrated via `docker-compose.yml`.
 - **Frontend (library-scanster)**: Vite + React + Shadcn/ui + TailwindCSS. Uses Supertokens for auth and the Express server as the backend.
 - **Image CDN**: Bunny.net CDN for cover images and book photos.
 
@@ -22,6 +22,7 @@ npm run dev          # nodemon dev server
 npm run build        # tsc compile
 npm start            # run compiled output
 npm test             # jest
+npm run reindex      # recreate ES index + reembed all books
 ```
 
 ### Library-Scanster (`/library-scanster`)
@@ -31,13 +32,6 @@ npm run build        # vite build (production)
 npm run build:dev    # vite build (development mode)
 npm run lint         # eslint
 npm run preview      # preview production build
-```
-
-### OCR Service (`/ocr-service`)
-```bash
-npm run build        # tsc compile
-npm start            # run compiled output
-npm run dev          # ts-node dev
 ```
 
 ### Docker (full stack)
@@ -64,9 +58,9 @@ docker exec bookscan-postgres psql -U bookuser -d bookscan -c "SQL_HERE"
 
 ## Key Data Flow
 
-- **ISBN scan**: Client → API → check DB → (miss) → OpenLibrary API → Ollama embedding → store in PostgreSQL with pgvector
-- **Image scan**: Client → API → Tesseract OCR → extract ISBN or text → vector similarity search via pgvector
+- **ISBN scan**: Client → API → check DB → (miss) → OpenLibrary API → LiteLLM embedding → index in Elasticsearch with vector
 - Books are shared across users; `user_books` is a junction table linking users to their collections
+- **Search**: Elasticsearch hybrid search (keyword + vector similarity via LiteLLM embeddings)
 
 ## Git Conventions
 

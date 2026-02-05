@@ -4,7 +4,6 @@ import dotenv from 'dotenv';
 import { middleware } from 'supertokens-node/framework/express';
 import { errorHandler } from 'supertokens-node/framework/express';
 import { supertokens } from './config/supertokens';
-import { bookRoutes } from './routes/books';
 import { libraryRoutes } from './routes/library';
 import { genreRoutes } from './routes/genres';
 import { imageRoutes } from './routes/images';
@@ -31,7 +30,6 @@ app.use(express.json());
 app.use(middleware());
 
 // Routes
-app.use('/books', bookRoutes);
 app.use('/library', libraryRoutes);
 app.use('/genres', genreRoutes);
 app.use('/images', imageRoutes);
