@@ -68,11 +68,19 @@ describe('genres controller', () => {
   });
 
   describe('addGenreToBook', () => {
-    it('adds genre to book', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] });
+    it('adds genre to book when user owns it', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // insert
       const res = mockRes();
       await addGenreToBook(mockReq({ params: { bookId: 'b1' }, body: { genreId: 1 } }), res);
       expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('returns 403 when user does not own book', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // ownership check fails
+      const res = mockRes();
+      await addGenreToBook(mockReq({ params: { bookId: 'b1' }, body: { genreId: 1 } }), res);
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 
@@ -86,11 +94,19 @@ describe('genres controller', () => {
   });
 
   describe('removeGenreFromBook', () => {
-    it('removes genre from book', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [] });
+    it('removes genre from book when user owns it', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ }] }); // ownership check
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // delete
       const res = mockRes();
       await removeGenreFromBook(mockReq({ params: { bookId: 'b1', genreId: '1' } }), res);
       expect(res.json).toHaveBeenCalledWith({ success: true });
+    });
+
+    it('returns 403 when user does not own book', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // ownership check fails
+      const res = mockRes();
+      await removeGenreFromBook(mockReq({ params: { bookId: 'b1', genreId: '1' } }), res);
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 });

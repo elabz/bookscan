@@ -20,6 +20,11 @@ import DiscoverPage from "./pages/DiscoverPage";
 import ProfilePage from "./pages/ProfilePage";
 import LibrarySetupPage from "./pages/LibrarySetupPage";
 import AdminPage from "./pages/AdminPage";
+import AboutPage from "./pages/AboutPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import HelpPage from "./pages/HelpPage";
+import ContactPage from "./pages/ContactPage";
 
 const App = () => (
   <TooltipProvider>
@@ -32,7 +37,12 @@ const App = () => (
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/auth/callback/*" element={<AuthCallbackPage />} />
         <Route path="/discover" element={<DiscoverPage />} />
-        
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+
         {/* Protected routes */}
         <Route path="/library" element={
           <RequireAuth>

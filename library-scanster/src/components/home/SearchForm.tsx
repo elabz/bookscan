@@ -1,5 +1,5 @@
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
@@ -7,10 +7,17 @@ import { Search } from 'lucide-react';
 interface SearchFormProps {
   onSearch: (query: string) => void;
   placeholder?: string;
+  initialValue?: string;
 }
 
-export const SearchForm = ({ onSearch, placeholder = "Search for books, authors, ISBN..." }: SearchFormProps) => {
-  const [searchQuery, setSearchQuery] = useState('');
+export const SearchForm = ({ onSearch, placeholder = "Search for books, authors, ISBN...", initialValue = '' }: SearchFormProps) => {
+  const [searchQuery, setSearchQuery] = useState(initialValue);
+
+  useEffect(() => {
+    if (initialValue) {
+      setSearchQuery(initialValue);
+    }
+  }, [initialValue]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();

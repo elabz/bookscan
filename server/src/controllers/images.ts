@@ -1,7 +1,18 @@
 import { Request, Response } from 'express';
 import { pool } from '../config/db';
-import { processAndUploadCover, uploadBufferToCDN } from '../services/imageProcessor';
+import { processAndUploadCover, uploadBufferToCDN, processAndUploadAvatar, CDN_PATHS } from '../services/imageProcessor';
 import sharp from 'sharp';
+
+const ALLOWED_IMAGE_HOSTS = [
+  'covers.openlibrary.org',
+  'books.google.com',
+  'images-na.ssl-images-amazon.com',
+  'm.media-amazon.com',
+  'cdn.allmybooks.com',
+];
+
+const sanitizeFilename = (name: string): string =>
+  name.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 100);
 
 /**
  * POST /images/process-cover
@@ -13,8 +24,21 @@ export const processCover = async (req: Request, res: Response) => {
   try {
     const { sourceUrl, isbn, bookId } = req.body;
 
-    if (!sourceUrl) {
+    if (!sourceUrl || typeof sourceUrl !== 'string') {
       return res.status(400).json({ error: 'sourceUrl is required' });
+    }
+
+    // Validate source URL to prevent SSRF
+    try {
+      const parsed = new URL(sourceUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return res.status(400).json({ error: 'Invalid URL protocol' });
+      }
+      if (!ALLOWED_IMAGE_HOSTS.some(host => parsed.hostname === host || parsed.hostname.endsWith('.' + host))) {
+        return res.status(400).json({ error: 'Image source not allowed' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL' });
     }
 
     const urls = await processAndUploadCover(sourceUrl, isbn);
@@ -37,8 +61,8 @@ export const processCover = async (req: Request, res: Response) => {
 /**
  * POST /images/upload
  * Accepts a multipart file upload, processes to 3 sizes (WebP), uploads to Bunny CDN.
- * Body (multipart): file, filename (optional)
- * Returns { large, medium, small } CDN URLs.
+ * Body (multipart): file, filename (optional), type (optional: 'cover' | 'avatar')
+ * Returns { large, medium, small } CDN URLs (or just { url } for avatars).
  */
 export const uploadImage = async (req: Request, res: Response) => {
   try {
@@ -47,10 +71,18 @@ export const uploadImage = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const baseName = (req.body.filename as string) || `img-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const rawName = (req.body.filename as string) || '';
+    const baseName = rawName ? sanitizeFilename(rawName) : `img-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    const uploadType = (req.body.type as string) || 'cover';
     const buffer = file.buffer;
-    console.log('[uploadImage] filename:', baseName, 'size:', buffer.length);
 
+    // Avatar uploads - single small size only
+    if (uploadType === 'avatar') {
+      const url = await processAndUploadAvatar(buffer, baseName);
+      return res.json({ url });
+    }
+
+    // Book cover uploads - 3 sizes, use user-covers path
     const sizes = [
       { suffix: 'L', width: 800 },
       { suffix: 'M', width: 400 },
@@ -67,7 +99,7 @@ export const uploadImage = async (req: Request, res: Response) => {
         .toBuffer();
 
       const filename = `${baseName}-${suffix}.webp`;
-      urls[suffix] = await uploadBufferToCDN(webpBuffer, filename);
+      urls[suffix] = await uploadBufferToCDN(webpBuffer, filename, CDN_PATHS.userCovers);
     }
 
     return res.json({

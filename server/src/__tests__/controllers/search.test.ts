@@ -1,3 +1,7 @@
+const mockQuery = jest.fn();
+jest.mock('../../config/db', () => ({
+  pool: { query: (...args: any[]) => mockQuery(...args) },
+}));
 jest.mock('../../services/searchService', () => ({
   hybridSearch: jest.fn().mockResolvedValue([{ id: 'b1', title: 'Result' }]),
   syncAllBooks: jest.fn().mockResolvedValue(5),
@@ -7,6 +11,16 @@ jest.mock('../../services/embeddingService', () => ({
 }));
 
 import { search, syncIndex } from '../../controllers/search';
+
+function mockReq(overrides: any = {}) {
+  return {
+    params: {},
+    query: {},
+    body: {},
+    session: { getUserId: () => 'admin-1' },
+    ...overrides,
+  } as any;
+}
 
 function mockRes() {
   const res: any = {};
@@ -40,10 +54,18 @@ describe('search controller', () => {
   });
 
   describe('syncIndex', () => {
-    it('returns sync count', async () => {
+    it('returns sync count for admin user', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_admin: true }] });
       const res = mockRes();
-      await syncIndex({} as any, res);
+      await syncIndex(mockReq(), res);
       expect(res.json).toHaveBeenCalledWith({ synced: 5 });
+    });
+
+    it('returns 403 for non-admin user', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ is_admin: false }] });
+      const res = mockRes();
+      await syncIndex(mockReq(), res);
+      expect(res.status).toHaveBeenCalledWith(403);
     });
   });
 });

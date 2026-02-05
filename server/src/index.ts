@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { middleware } from 'supertokens-node/framework/express';
 import { errorHandler } from 'supertokens-node/framework/express';
@@ -19,27 +21,52 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 4000;
 
-// Middleware
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // managed by nginx/frontend in production
+  crossOriginEmbedderPolicy: false, // allow CDN images
+}));
+
+// CORS
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   allowedHeaders: ['content-type', ...supertokens.getAllCORSHeaders()],
   credentials: true,
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(middleware());
+
+// Rate limiting for public endpoints
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many messages, please try again later' },
+});
 
 // Routes
 app.use('/library', libraryRoutes);
 app.use('/genres', genreRoutes);
 app.use('/images', imageRoutes);
-app.use('/search', searchRoutes);
+app.use('/search', publicLimiter, searchRoutes);
 app.use('/users', userRoutes);
 app.use('/locations', locationRoutes);
 app.use('/collections', collectionRoutes);
 
-// Contact form endpoint
-app.post('/contact', async (req, res): Promise<void> => {
+// Contact form endpoint with rate limiting and validation
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+app.post('/contact', contactLimiter, async (req, res): Promise<void> => {
   try {
     const { name, email, subject, message } = req.body;
 
@@ -48,9 +75,26 @@ app.post('/contact', async (req, res): Promise<void> => {
       return;
     }
 
+    if (typeof name !== 'string' || name.length > 200) {
+      res.status(400).json({ error: 'Invalid name' });
+      return;
+    }
+    if (typeof email !== 'string' || email.length > 254 || !EMAIL_RE.test(email)) {
+      res.status(400).json({ error: 'Invalid email address' });
+      return;
+    }
+    if (subject && (typeof subject !== 'string' || subject.length > 300)) {
+      res.status(400).json({ error: 'Invalid subject' });
+      return;
+    }
+    if (typeof message !== 'string' || message.length > 5000) {
+      res.status(400).json({ error: 'Message too long (max 5000 characters)' });
+      return;
+    }
+
     await pool.query(
       `INSERT INTO contact_messages (name, email, subject, message) VALUES ($1, $2, $3, $4)`,
-      [name, email, subject || null, message]
+      [name.trim(), email.trim().toLowerCase(), (subject || '').trim() || null, message.trim()]
     );
 
     res.json({ success: true, message: 'Message sent successfully' });

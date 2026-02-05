@@ -61,11 +61,20 @@ export const getBookGenres = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Add genre to book
+// Add genre to book (requires ownership)
 export const addGenreToBook = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.session!.getUserId();
     const { bookId } = req.params;
     const { genreId } = req.body;
+
+    const ownership = await pool.query(
+      'SELECT 1 FROM user_books WHERE user_id = $1 AND book_id = $2',
+      [userId, bookId]
+    );
+    if (ownership.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not own this book' });
+    }
 
     await pool.query(
       'INSERT INTO book_genres (book_id, genre_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
@@ -96,10 +105,19 @@ export const getBooksByGenre = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// Remove genre from book
+// Remove genre from book (requires ownership)
 export const removeGenreFromBook = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.session!.getUserId();
     const { bookId, genreId } = req.params;
+
+    const ownership = await pool.query(
+      'SELECT 1 FROM user_books WHERE user_id = $1 AND book_id = $2',
+      [userId, bookId]
+    );
+    if (ownership.rows.length === 0) {
+      return res.status(403).json({ error: 'You do not own this book' });
+    }
 
     await pool.query(
       'DELETE FROM book_genres WHERE book_id = $1 AND genre_id = $2',

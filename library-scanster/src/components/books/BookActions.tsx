@@ -6,16 +6,18 @@ import { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import { addBook } from '@/services/bookService';
 import { removeBookFromLibrary } from '@/services/bookOperations';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
 interface BookActionsProps {
   book: Book;
   isInLibrary?: boolean;
-  onLibraryStatusChange?: () => void;
+  onLibraryStatusChange?: (newBookId?: string) => void;
   onEditClick?: () => void;
 }
 
 export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange, onEditClick }: BookActionsProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const { userId } = useAuth();
   const { toast } = useToast();
 
@@ -47,13 +49,13 @@ export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange, 
         }
       }
 
-      await addBook(bookToAdd);
+      const addedBook = await addBook(bookToAdd);
       toast({
         title: "Success!",
         description: "Book added to your library"
       });
       if (onLibraryStatusChange) {
-        onLibraryStatusChange();
+        onLibraryStatusChange(addedBook?.id);
       }
     } catch (error) {
       console.error("Error adding book:", error);
@@ -104,19 +106,43 @@ export const BookActions = ({ book, isInLibrary = false, onLibraryStatusChange, 
   };
 
   return (
-    <div className="mt-8 flex flex-wrap gap-4 animate-slide-up" style={{ animationDelay: '250ms' }}>
-      {isInLibrary ? (
-        <>
-          <Button onClick={onEditClick}>Edit Details</Button>
-          <Button variant="outline" onClick={handleRemoveFromLibrary} disabled={isLoading}>
-            {isLoading ? "Processing..." : "Remove from Library"}
+    <>
+      <div className="mt-8 flex flex-wrap gap-4 animate-slide-up" style={{ animationDelay: '250ms' }}>
+        {isInLibrary ? (
+          <>
+            <Button onClick={onEditClick}>Edit Details</Button>
+            <Button variant="outline" onClick={() => setShowRemoveConfirm(true)} disabled={isLoading}>
+              {isLoading ? "Processing..." : "Remove from Library"}
+            </Button>
+          </>
+        ) : (
+          <Button onClick={handleAddToLibrary} disabled={isLoading}>
+            {isLoading ? "Adding..." : "Add to Library"}
           </Button>
-        </>
-      ) : (
-        <Button onClick={handleAddToLibrary} disabled={isLoading}>
-          {isLoading ? "Adding..." : "Add to Library"}
-        </Button>
-      )}
-    </div>
+        )}
+      </div>
+
+      {/* Remove from Library Confirmation Dialog */}
+      <AlertDialog open={showRemoveConfirm} onOpenChange={setShowRemoveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove from Library</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove "{book.title}" from your library? Your photos and personal notes for this book will be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemoveFromLibrary}
+              disabled={isLoading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isLoading ? 'Removing...' : 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };

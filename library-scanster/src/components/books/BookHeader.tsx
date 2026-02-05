@@ -1,6 +1,5 @@
 
 import { Book } from '@/types/book';
-import { BookCategories } from '@/components/books/BookCategories';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -15,26 +14,20 @@ export const BookHeader = ({ book }: BookHeaderProps) => {
   return (
     <>
       {/* Back Button */}
-      <Button 
-        variant="ghost" 
-        size="sm" 
-        className="mb-6" 
+      <Button
+        variant="ghost"
+        size="sm"
+        className="mb-6"
         onClick={() => navigate('/library')}
       >
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back
       </Button>
-      
+
       <h1 className="text-3xl font-bold mb-2">{book.title}</h1>
-      <p className="text-xl mb-4">
+      <p className="text-xl mb-6">
         by {book.authors?.join(', ') || 'Unknown Author'}
       </p>
-      
-      {book.categories && book.categories.length > 0 && (
-        <div className="mb-6">
-          <BookCategories categories={book.categories} />
-        </div>
-      )}
     </>
   );
 };

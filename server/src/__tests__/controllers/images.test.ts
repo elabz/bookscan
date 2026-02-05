@@ -44,14 +44,21 @@ describe('images controller', () => {
 
     it('processes cover and returns urls', async () => {
       const res = mockRes();
-      await processCover({ body: { sourceUrl: 'http://img.jpg' } } as any, res);
+      await processCover({ body: { sourceUrl: 'https://covers.openlibrary.org/b/isbn/123-M.jpg' } } as any, res);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ cover_url: 'http://cdn/M.webp' }));
+    });
+
+    it('rejects disallowed source URL', async () => {
+      const res = mockRes();
+      await processCover({ body: { sourceUrl: 'http://evil.com/img.jpg' } } as any, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Image source not allowed' });
     });
 
     it('updates book record when bookId provided', async () => {
       const res = mockRes();
       mockQuery.mockResolvedValueOnce({ rows: [] });
-      await processCover({ body: { sourceUrl: 'http://img.jpg', bookId: 'b1' } } as any, res);
+      await processCover({ body: { sourceUrl: 'https://covers.openlibrary.org/b/isbn/123-M.jpg', bookId: 'b1' } } as any, res);
       expect(mockQuery).toHaveBeenCalled();
     });
   });

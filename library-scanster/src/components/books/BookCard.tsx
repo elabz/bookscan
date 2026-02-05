@@ -12,15 +12,17 @@ interface BookCardProps {
   className?: string;
   onClick?: () => void;
   actionLabel?: string;
+  isExternalSource?: boolean;
 }
 
-export const BookCard = ({ 
-  book, 
-  isLoading = false, 
-  style, 
+export const BookCard = ({
+  book,
+  isLoading = false,
+  style,
   className,
   onClick,
-  actionLabel
+  actionLabel,
+  isExternalSource = false
 }: BookCardProps) => {
   if (isLoading) {
     return (
@@ -101,8 +103,9 @@ export const BookCard = ({
   // make it a Link to the book details
   if (!onClick || !actionLabel) {
     return (
-      <Link 
-        to={`/books/${book.id}`} 
+      <Link
+        to={`/books/${book.id}`}
+        state={isExternalSource ? { book } : undefined}
         className={cn("book-card cover-hover group", className)}
         style={style}
       >

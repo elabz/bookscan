@@ -168,7 +168,8 @@ export const BookImageEditor = ({ bookId, isbn, onImageAdded }: BookImageEditorP
     if (!imageBlob) return;
     setIsProcessing(true);
     try {
-      const filename = isbn || `book-${bookId}-${Date.now()}`;
+      // Use unique filename to avoid CDN caching issues with ISBN-based names
+      const filename = `${isbn || bookId}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const urls = await uploadImageViaBackend(imageBlob, filename);
 
       const image = await addBookImage(bookId, {
