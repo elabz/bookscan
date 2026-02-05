@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-commit hook: runs lint/typecheck on staged files.
+# Setup: git config core.hooksPath .githooks
+
+FRONTEND_CHANGED=false
+SERVER_CHANGED=false
+
+# Check which projects have staged changes
+if git diff --cached --name-only | grep -q '^library-scanster/'; then
+  FRONTEND_CHANGED=true
+fi
+
+if git diff --cached --name-only | grep -q '^server/'; then
+  SERVER_CHANGED=true
+fi
+
+if [ "$FRONTEND_CHANGED" = true ]; then
+  echo "[pre-commit] Running eslint on library-scanster..."
+  cd library-scanster
+  npx eslint --max-warnings=0 .
+  cd ..
+fi
+
+if [ "$SERVER_CHANGED" = true ]; then
+  echo "[pre-commit] Running tsc --noEmit on server..."
+  cd server
+  npx tsc --noEmit
+  cd ..
+fi

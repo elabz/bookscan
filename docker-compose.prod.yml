@@ -1,9 +1,12 @@
 services:
   frontend:
-    container_name: allmybooks-frontend
+    container_name: bookscan-frontend
     build:
       context: ./library-scanster
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL}
+        - VITE_CDN_BASE=${VITE_CDN_BASE:-/}
     ports:
       - "8100:80"
     depends_on:
@@ -11,9 +14,14 @@ services:
     networks:
       - bookscan-net
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
   backend:
-    container_name: allmybooks-backend
+    container_name: bookscan-backend
     build:
       context: ./server
       dockerfile: Dockerfile
@@ -23,17 +31,25 @@ services:
       - PORT=${PORT:-4001}
       - NODE_ENV=production
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_SSL=${POSTGRES_SSL:-false}
+      - POSTGRES_CA_CERT=${POSTGRES_CA_CERT:-}
       - SUPERTOKENS_CONNECTION_URI=${SUPERTOKENS_CONNECTION_URI:-http://supertokens:3567}
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
       - API_URL=${API_URL}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID:-}
+      - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
       - CDN_STORAGE_ZONE_NAME=${CDN_STORAGE_ZONE_NAME}
       - CDN_REGION=${CDN_REGION}
       - CDN_PATH=${CDN_PATH}
       - CDN_URL=${CDN_URL}
       - CDN_API_KEY=${CDN_API_KEY}
+      - CDN_ACCOUNT_API_KEY=${CDN_ACCOUNT_API_KEY:-}
+      - CDN_ASSETS_PATH=${CDN_ASSETS_PATH:-app}
       - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-http://elasticsearch:9200}
       - LITELLM_API_KEY=${LITELLM_API_KEY}
       - EMBEDDINGS_URL=${EMBEDDINGS_URL}
@@ -45,8 +61,12 @@ services:
         condition: service_started
     networks:
       - bookscan-net
-      - laradock_backend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
 
   postgres:
     container_name: bookscan-postgres
@@ -66,6 +86,11 @@ services:
     networks:
       - bookscan-net
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
   supertokens:
     container_name: bookscan-supertokens
@@ -82,11 +107,14 @@ services:
     networks:
       - bookscan-net
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
 
 networks:
   bookscan-net:
-  laradock_backend:
-    external: true
 
 volumes:
   postgres-data:

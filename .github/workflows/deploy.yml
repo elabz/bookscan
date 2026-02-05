@@ -1,0 +1,81 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install server dependencies
+        run: cd server && npm ci
+
+      - name: Run server tests
+        run: cd server && npm test
+
+      - name: Install frontend dependencies
+        run: cd library-scanster && npm ci
+
+      - name: Lint frontend
+        run: cd library-scanster && npm run lint
+
+  deploy:
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Write .env from secrets
+        run: echo "${{ secrets.ENV_FILE }}" > .env
+
+      - name: Load env vars
+        run: |
+          set -a
+          source .env
+          set +a
+          echo "::add-mask::$CDN_API_KEY"
+          echo "::add-mask::$CDN_ACCOUNT_API_KEY"
+          echo "VITE_API_URL=$VITE_API_URL" >> "$GITHUB_ENV"
+          echo "VITE_CDN_BASE=$VITE_CDN_BASE" >> "$GITHUB_ENV"
+          echo "CDN_API_KEY=$CDN_API_KEY" >> "$GITHUB_ENV"
+          echo "CDN_ACCOUNT_API_KEY=$CDN_ACCOUNT_API_KEY" >> "$GITHUB_ENV"
+          echo "CDN_STORAGE_ZONE_NAME=$CDN_STORAGE_ZONE_NAME" >> "$GITHUB_ENV"
+          echo "CDN_REGION=$CDN_REGION" >> "$GITHUB_ENV"
+          echo "CDN_URL=$CDN_URL" >> "$GITHUB_ENV"
+          echo "CDN_ASSETS_PATH=$CDN_ASSETS_PATH" >> "$GITHUB_ENV"
+
+      - name: Build frontend
+        run: |
+          cd library-scanster
+          npm ci
+          VITE_API_URL=${{ env.VITE_API_URL }} VITE_CDN_BASE=${{ env.VITE_CDN_BASE }} npm run build
+
+      - name: Deploy assets to CDN
+        run: ./scripts/cdn-deploy.sh library-scanster/dist/assets
+
+      - name: Build and start containers
+        run: docker compose -f docker-compose.prod.yml up -d --build
+
+      - name: Health check
+        run: |
+          echo "Waiting for backend to start..."
+          sleep 10
+          curl -sf http://localhost:4001/search?q=test > /dev/null || echo "Health check warning: backend not responding yet"
+
+      - name: Run pending migrations
+        run: |
+          for f in library-scanster/src/db/migrations/*.sql; do
+            echo "Running migration: $f"
+            docker exec -i bookscan-postgres psql -U bookuser -d bookscan < "$f" 2>&1 || true
+          done

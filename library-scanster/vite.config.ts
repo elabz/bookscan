@@ -5,18 +5,19 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: process.env.VITE_CDN_BASE || '/',
   server: {
     host: "0.0.0.0",
     port: 8100,
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://allmybooks-backend:4001',
+        target: 'http://bookscan-backend:4001',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/auth': {
-        target: 'http://allmybooks-backend:4001',
+        target: 'http://bookscan-backend:4001',
         changeOrigin: true,
         bypass: (req) => {
           // Don't proxy OAuth callback routes - let React Router handle them

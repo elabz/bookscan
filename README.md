@@ -76,21 +76,20 @@ docker-compose up --build
 ```
 
 ## Configuration
-`.env` file structure:
-```ini
-# PostgreSQL
-POSTGRES_USER=bookuser
-POSTGRES_PASSWORD=securepass
-POSTGRES_DB=bookscan
+Copy `.env.example` to `.env` at the repo root and fill in your values:
 
-# Redis
-REDIS_URL=redis://redis:6379
+```bash
+cp .env.example .env
+```
 
-# Ollama
-OLLAMA_ENDPOINT=http://ollama:11434
+All variables (database, auth, CDN, search, frontend build-time) are in this single file. Docker Compose reads it automatically. See `.env.example` for all available variables.
 
-# Supertokens
-SUPERTOKENS_CONNECTION_URI=http://supertokens:3567
+### Pre-commit Hook
+
+Enable the pre-commit hook to run lint/typecheck on staged files:
+
+```bash
+git config core.hooksPath .githooks
 ```
 
 ## Database Setup

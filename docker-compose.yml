@@ -1,6 +1,6 @@
 services:
   frontend:
-    container_name: allmybooks-frontend
+    container_name: bookscan-frontend
     build:
       context: ./library-scanster
       dockerfile: Dockerfile.dev
@@ -16,7 +16,7 @@ services:
       - laradock_frontend
 
   backend:
-    container_name: allmybooks-backend
+    container_name: bookscan-backend
     build:
       context: ./server
       dockerfile: Dockerfile.dev
@@ -29,6 +29,7 @@ services:
       - PORT=${PORT:-4001}
       - NODE_ENV=${NODE_ENV:-development}
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - POSTGRES_SSL=false
       - SUPERTOKENS_CONNECTION_URI=${SUPERTOKENS_CONNECTION_URI:-http://supertokens:3567}
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY}
       - FRONTEND_URL=${FRONTEND_URL}
