@@ -44,12 +44,12 @@ export const ManualIsbnEntry = forwardRef<ManualIsbnEntryHandle, ManualIsbnEntry
 
       // Submit the original ISBN (with hyphens if present)
       // The search service will normalize it
-      onSubmit(manualIsbn.replace(/^isbn[:\s]*/i, '').trim());
+      onSubmit(manualIsbn.replace(/^(isbn|lccn)[:\s]*/i, '').trim());
     };
 
     return (
       <div ref={containerRef} className="bg-white dark:bg-gray-800 rounded-xl p-6 md:p-8 shadow-sm mb-8 animate-slide-up" style={{ animationDelay: '200ms' }}>
-        <h2 className="text-xl font-medium mb-4">Manual ISBN Entry</h2>
+        <h2 className="text-xl font-medium mb-4">Manual ISBN / LCCN Entry</h2>
 
         {bannerMessage && (
           <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
@@ -60,7 +60,7 @@ export const ManualIsbnEntry = forwardRef<ManualIsbnEntryHandle, ManualIsbnEntry
         )}
 
         <p className="text-muted-foreground mb-6">
-          If scanning doesn't work, you can enter the ISBN manually. Both formats (e.g., 9780743273565 or 1-885183-58-5) are accepted.
+          If scanning doesn't work, you can enter the ISBN or LCCN manually. Both ISBN formats (e.g., 9780743273565 or 1-885183-58-5) and LCCN numbers are accepted.
         </p>
 
         <form onSubmit={handleManualSubmit} className="flex gap-2">
@@ -68,7 +68,7 @@ export const ManualIsbnEntry = forwardRef<ManualIsbnEntryHandle, ManualIsbnEntry
             ref={inputRef}
             value={manualIsbn}
             onChange={(e) => setManualIsbn(e.target.value)}
-            placeholder="Enter ISBN (e.g., 9780743273565 or 1-885183-58-5)"
+            placeholder="Enter ISBN or LCCN"
             className="flex-1"
             disabled={isSearching}
           />

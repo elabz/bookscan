@@ -10,7 +10,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { X, Plus } from 'lucide-react';
 
 interface EditableBookFormProps {
   book: Book;
@@ -38,10 +41,10 @@ const CURRENCIES = [
 ];
 
 // Helper to extract description string from various formats
-const getDescriptionText = (description: any): string => {
+const getDescriptionText = (description: string | { value?: string } | undefined): string => {
   if (!description) return '';
   if (typeof description === 'string') return description;
-  if (description?.value) return description.value;
+  if (typeof description === 'object' && description.value) return description.value;
   return '';
 };
 
@@ -54,6 +57,7 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
     title: book.title || '',
     authors: book.authors?.join(', ') || '',
     isbn: book.isbn || '',
+    lccn: book.lccn || '',
     publisher: book.publisher || '',
     publishedDate: book.publishedDate || '',
     pageCount: book.pageCount?.toString() || book.number_of_pages?.toString() || '',
@@ -87,11 +91,18 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
   });
   const [isUploading, setIsUploading] = useState(false);
 
+  // Subjects
+  const [subjects, setSubjects] = useState<{ name: string; url?: string }[]>(
+    book.subjects || []
+  );
+  const [newSubject, setNewSubject] = useState('');
+
   // Lock state for each field (locked if value exists)
   const [lockedFields, setLockedFields] = useState<Record<string, boolean>>(() => ({
     title: !!book.title,
     authors: !!(book.authors?.length),
     isbn: !!book.isbn,
+    lccn: !!book.lccn,
     publisher: !!book.publisher,
     publishedDate: !!book.publishedDate,
     pageCount: !!(book.pageCount || book.number_of_pages),
@@ -113,6 +124,7 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
       title: formData.title,
       authors: formData.authors.split(',').map(a => a.trim()).filter(Boolean),
       isbn: formData.isbn,
+      lccn: formData.lccn || undefined,
       publisher: formData.publisher || undefined,
       publishedDate: formData.publishedDate || undefined,
       pageCount: formData.pageCount ? parseInt(formData.pageCount, 10) : undefined,
@@ -131,9 +143,10 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
       cover: coverUrls.coverUrl || undefined,
       coverSmall: coverUrls.coverSmallUrl || undefined,
       coverLarge: coverUrls.coverLargeUrl || undefined,
+      subjects: subjects.length > 0 ? subjects : undefined,
     };
     onChange(updatedBook);
-  }, [formData, dimensionUnit, weightUnit, priceCurrency, coverUrls]);
+  }, [formData, dimensionUnit, weightUnit, priceCurrency, coverUrls, subjects]);
 
   const handleFieldChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -149,6 +162,29 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
     coverLargeUrl: string;
   }) => {
     setCoverUrls(newUrls);
+  };
+
+  const handleAddSubject = () => {
+    const trimmed = newSubject.trim();
+    if (!trimmed) return;
+    // Check if subject already exists (case-insensitive)
+    if (subjects.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) {
+      setNewSubject('');
+      return;
+    }
+    setSubjects(prev => [...prev, { name: trimmed }]);
+    setNewSubject('');
+  };
+
+  const handleRemoveSubject = (index: number) => {
+    setSubjects(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubjectKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddSubject();
+    }
   };
 
   return (
@@ -189,16 +225,29 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
             placeholder="Author names, comma separated"
           />
 
-          <EditableField
-            id="isbn"
-            label="ISBN"
-            value={formData.isbn}
-            onChange={(v) => handleFieldChange('isbn', v)}
-            isLocked={lockedFields.isbn}
-            onToggleLock={() => toggleLock('isbn')}
-            placeholder="ISBN-10 or ISBN-13"
-            inputClassName="font-mono"
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <EditableField
+              id="isbn"
+              label="ISBN"
+              value={formData.isbn}
+              onChange={(v) => handleFieldChange('isbn', v)}
+              isLocked={lockedFields.isbn}
+              onToggleLock={() => toggleLock('isbn')}
+              placeholder="ISBN-10 or ISBN-13"
+              inputClassName="font-mono"
+            />
+
+            <EditableField
+              id="lccn"
+              label="LCCN"
+              value={formData.lccn}
+              onChange={(v) => handleFieldChange('lccn', v)}
+              isLocked={lockedFields.lccn}
+              onToggleLock={() => toggleLock('lccn')}
+              placeholder="Library of Congress number"
+              inputClassName="font-mono"
+            />
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <EditableField
@@ -395,6 +444,54 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
             placeholder="List price"
           />
         </div>
+      </div>
+
+      {/* Subjects Section */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-muted-foreground">
+          Subjects
+        </label>
+        <div className="flex flex-wrap gap-2 min-h-[32px]">
+          {subjects.map((subject, index) => (
+            <Badge
+              key={index}
+              variant="secondary"
+              className="flex items-center gap-1 pr-1"
+            >
+              {subject.name}
+              <button
+                type="button"
+                onClick={() => handleRemoveSubject(index)}
+                className="ml-1 rounded-full p-0.5 hover:bg-muted"
+                aria-label={`Remove ${subject.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+        <div className="flex gap-2 max-w-md">
+          <Input
+            value={newSubject}
+            onChange={(e) => setNewSubject(e.target.value)}
+            onKeyDown={handleSubjectKeyDown}
+            placeholder="Add a subject..."
+            className="h-9"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleAddSubject}
+            disabled={!newSubject.trim()}
+            className="h-9 px-3"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          New subjects will be available to you immediately. An admin will review them for use by others.
+        </p>
       </div>
     </div>
   );

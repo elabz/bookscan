@@ -2,7 +2,7 @@
 import { Book } from '@/types/book';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { BookPlus, BookCheck, Tag, Loader2, Pencil, ExternalLink } from 'lucide-react';
+import { BookPlus, BookCheck, Tag, Loader2, Pencil, ExternalLink, Sparkles } from 'lucide-react';
 import { LocationPicker } from '@/components/library/LocationPicker';
 
 interface BookDetailsCardProps {
@@ -12,6 +12,8 @@ interface BookDetailsCardProps {
   isAddingToLibrary?: boolean;
   selectedLocationId?: string | null;
   onLocationChange?: (locationId: string | null) => void;
+  hasSimilarBooks?: boolean;
+  onScrollToSimilar?: () => void;
 }
 
 export const BookDetailsCard = ({
@@ -21,14 +23,13 @@ export const BookDetailsCard = ({
   isAddingToLibrary = false,
   selectedLocationId,
   onLocationChange,
+  hasSimilarBooks,
+  onScrollToSimilar,
 }: BookDetailsCardProps) => {
-  const getDescriptionText = (description: any): string => {
+  const getDescriptionText = (description: string | { value?: string } | undefined): string => {
     if (!description) return '';
     if (typeof description === 'string') return description;
-    if (description && typeof description === 'object') {
-      if (description.value) return description.value;
-      return '';
-    }
+    if (typeof description === 'object' && description.value) return description.value;
     return '';
   };
 
@@ -44,6 +45,43 @@ export const BookDetailsCard = ({
       tabIndex={0}
     >
       <h2 className="text-xl font-medium mb-4">Book Found!</h2>
+
+      {/* Action buttons at top */}
+      <div className="pb-4 mb-4 border-b space-y-3">
+        {onLocationChange && (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span className="shrink-0">Location:</span>
+            <LocationPicker value={selectedLocationId ?? null} onChange={onLocationChange} />
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onAddToLibrary} disabled={isAddingToLibrary}>
+            {isAddingToLibrary ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Adding...
+              </>
+            ) : (
+              <>
+                <BookPlus className="mr-2 h-4 w-4" />
+                Add to Library
+              </>
+            )}
+          </Button>
+          {onEditBook && (
+            <Button onClick={onEditBook} variant="outline">
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit Details
+            </Button>
+          )}
+          {hasSimilarBooks && onScrollToSimilar && (
+            <Button onClick={onScrollToSimilar} variant="ghost" className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/20">
+              <Sparkles className="h-4 w-4 mr-1" />
+              Similar books found
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Cover + details */}
       <div className="flex flex-col md:flex-row gap-6">
@@ -113,6 +151,12 @@ export const BookDetailsCard = ({
               <>
                 <span className="font-medium text-muted-foreground">ISBN</span>
                 <span className="font-mono text-xs">{book.isbn}</span>
+              </>
+            )}
+            {book.lccn && (
+              <>
+                <span className="font-medium text-muted-foreground">LCCN</span>
+                <span className="font-mono text-xs">{book.lccn}</span>
               </>
             )}
           </div>
@@ -206,37 +250,6 @@ export const BookDetailsCard = ({
           </div>
         </div>
       )}
-
-      {/* Bottom actions + location */}
-      <div className="mt-6 pt-4 border-t space-y-3">
-        {onLocationChange && (
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="shrink-0">Location:</span>
-            <LocationPicker value={selectedLocationId ?? null} onChange={onLocationChange} />
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={onAddToLibrary} disabled={isAddingToLibrary}>
-            {isAddingToLibrary ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Adding...
-              </>
-            ) : (
-              <>
-                <BookPlus className="mr-2 h-4 w-4" />
-                Add to Library
-              </>
-            )}
-          </Button>
-          {onEditBook && (
-            <Button onClick={onEditBook} variant="outline">
-              <Pencil className="h-4 w-4 mr-1" />
-              Edit Details
-            </Button>
-          )}
-        </div>
-      </div>
     </div>
   );
 };

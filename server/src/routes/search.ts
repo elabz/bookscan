@@ -1,9 +1,11 @@
 import express from 'express';
-import { search, syncIndex } from '../controllers/search';
+import { verifySession } from 'supertokens-node/recipe/session/framework/express';
+import { search, searchSimilarInLibrary, syncIndex } from '../controllers/search';
 
 const router = express.Router();
 
 router.get('/', search);
-router.post('/sync', syncIndex);
+router.post('/similar', verifySession(), searchSimilarInLibrary);
+router.post('/sync', verifySession(), syncIndex);
 
 export { router as searchRoutes };

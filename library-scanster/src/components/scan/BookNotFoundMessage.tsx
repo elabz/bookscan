@@ -89,7 +89,7 @@ export const BookNotFoundMessage: React.FC<BookNotFoundMessageProps> = ({
               type="text"
               value={manualIsbn}
               onChange={(e) => setManualIsbn(e.target.value)}
-              placeholder="Enter ISBN (e.g. 978-0-123456-78-9)"
+              placeholder="Enter ISBN or LCCN"
               className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
             />
             <Button type="submit" size="sm" disabled={!manualIsbn.trim()}>

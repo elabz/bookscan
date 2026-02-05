@@ -1,23 +1,47 @@
 
 import { api } from '@/lib/api';
-import { Book } from '@/types/book';
+import { Book, DbBookRow } from '@/types/book';
 import { dbBookToAppFormat } from './converters';
 
 // Search books via local Elasticsearch (keyword + vector)
 export const searchBooks = async (query: string): Promise<Book[]> => {
   try {
-    const results = await api.get<any[]>(`/search?q=${encodeURIComponent(query)}&limit=20`);
-    return results.map((item: any) => dbBookToAppFormat(item));
+    const results = await api.get<DbBookRow[]>(`/search?q=${encodeURIComponent(query)}&limit=20`);
+    return results.map((item) => dbBookToAppFormat(item));
   } catch (error) {
     console.error('Error searching books:', error);
     return [];
   }
 };
 
-// Search OpenLibrary API (for discovering new books not yet in our DB)
-export const searchOpenLibrary = async (query: string): Promise<Book[]> => {
+// Search for similar books in user's library
+export const searchSimilarInLibrary = async (text: string, limit = 10): Promise<Book[]> => {
   try {
-    const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`);
+    const results = await api.post<DbBookRow[]>('/search/similar', { text, limit });
+    return results.map((item) => dbBookToAppFormat(item));
+  } catch (error) {
+    console.error('Error searching similar books:', error);
+    return [];
+  }
+};
+
+interface OpenLibrarySearchDoc {
+  key?: string;
+  title?: string;
+  author_name?: string[];
+  cover_i?: number;
+  first_publish_year?: number;
+  isbn?: string[];
+  description?: string;
+  number_of_pages?: number;
+  subject?: string[];
+  language?: string[];
+}
+
+// Search OpenLibrary API (for discovering new books not yet in our DB)
+export const searchOpenLibrary = async (query: string, limit = 20): Promise<Book[]> => {
+  try {
+    const response = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${limit}`);
 
     if (!response.ok) {
       throw new Error('Failed to fetch from OpenLibrary API');
@@ -26,7 +50,7 @@ export const searchOpenLibrary = async (query: string): Promise<Book[]> => {
     const data = await response.json();
 
     if (data.docs && Array.isArray(data.docs)) {
-      return data.docs.map((item: any): Book => {
+      return data.docs.map((item: OpenLibrarySearchDoc): Book => {
         const coverId = item.cover_i;
         const coverUrl = coverId
           ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg`

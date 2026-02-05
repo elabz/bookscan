@@ -1,4 +1,4 @@
-import { Book, Genre } from '@/types/book';
+import { Book, Genre, DbBookRow } from '@/types/book';
 
 // Convert our Book type to the DB row schema (snake_case)
 export const bookToDbFormat = (book: Book) => {
@@ -7,6 +7,7 @@ export const bookToDbFormat = (book: Book) => {
     title: book.title,
     authors: book.authors,
     isbn: book.isbn || null,
+    lccn: book.lccn || null,
     cover_url: book.cover || null,
     cover_small_url: book.coverSmall || null,
     cover_large_url: book.coverLarge || null,
@@ -38,13 +39,14 @@ export const bookToDbFormat = (book: Book) => {
 };
 
 // Convert from DB row (snake_case) to our Book type
-export const dbBookToAppFormat = (book: any, genres?: Genre[]): Book => {
+export const dbBookToAppFormat = (book: DbBookRow, genres?: Genre[]): Book => {
   const ov = book.user_overrides || {};
   return {
     id: book.id,
     title: ov.title || book.title,
     authors: ov.authors || book.authors,
     isbn: book.isbn,
+    lccn: book.lccn,
     cover: book.user_cover_url || book.cover_url,
     coverSmall: book.user_cover_small_url || book.cover_small_url,
     coverLarge: book.user_cover_large_url || book.cover_large_url,

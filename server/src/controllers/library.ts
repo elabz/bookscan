@@ -83,6 +83,22 @@ export const lookupBookByCode = async (req: SessionRequest, res: Response) => {
       );
     }
 
+    // Search by LCCN (top-level column)
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        "SELECT * FROM books WHERE lccn = $1 LIMIT 1",
+        [code]
+      );
+    }
+
+    // Search by LCCN in identifiers JSONB
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        "SELECT * FROM books WHERE identifiers->'lccn' @> $1::jsonb LIMIT 1",
+        [JSON.stringify([code])]
+      );
+    }
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Not found' });
     }
@@ -217,6 +233,18 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Check if book exists by LCCN
+    const bookLccn = book.lccn || book.identifiers?.lccn?.[0];
+    if (!bookId && bookLccn) {
+      const existing = await pool.query(
+        "SELECT id FROM books WHERE lccn = $1 OR identifiers->'lccn' @> $2::jsonb LIMIT 1",
+        [bookLccn, JSON.stringify([bookLccn])]
+      );
+      if (existing.rows.length > 0) {
+        bookId = existing.rows[0].id;
+      }
+    }
+
     if (!bookId && book.title && book.authors?.length > 0) {
       const existing = await pool.query(
         "SELECT id FROM books WHERE title = $1 AND authors @> $2::jsonb LIMIT 1",
@@ -232,7 +260,7 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
       const id = book.id || Math.random().toString(36).substring(2, 9);
       const result = await pool.query(
         `INSERT INTO books (
-          id, title, authors, isbn, cover_url, cover_small_url, cover_large_url,
+          id, title, authors, isbn, lccn, cover_url, cover_small_url, cover_large_url,
           publisher, published_date, description, page_count, categories, language,
           edition, width, height, depth, dimension_unit, weight_unit,
           identifiers, classifications, links, weight,
@@ -241,10 +269,11 @@ export const addBookToLibrary = async (req: AuthRequest, res: Response) => {
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
           $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
-          NOW(), NOW()
+          $32, NOW(), NOW()
         ) RETURNING *`,
         [
           id, book.title, JSON.stringify(book.authors), book.isbn || null,
+          bookLccn || null,
           book.cover_url || null, book.cover_small_url || null, book.cover_large_url || null,
           book.publisher || null, book.published_date || null, book.description || null,
           book.page_count || null, book.categories ? JSON.stringify(book.categories) : null,
@@ -346,11 +375,12 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
     const isAdmin = adminCheck.rows[0]?.is_admin === true;
 
     const allowedFields = [
-      'title', 'authors', 'isbn', 'publisher', 'published_date',
+      'title', 'authors', 'isbn', 'lccn', 'publisher', 'published_date',
       'description', 'page_count', 'language', 'edition', 'width', 'height',
       'depth', 'dimension_unit', 'weight_unit', 'weight',
       'price', 'price_published', 'price_currency',
       'cover_url', 'cover_small_url', 'cover_large_url',
+      'subjects',
     ];
 
     // Filter to only allowed fields
@@ -389,6 +419,32 @@ export const updateBook = async (req: AuthRequest, res: Response) => {
         [id, userId, JSON.stringify(filteredUpdates)]
       );
       return res.json({ success: true, personal: true, message: 'Cover set as personal override, pending admin approval for global change' });
+    }
+
+    // Handle subjects: queue new ones for admin approval
+    if (filteredUpdates.subjects && Array.isArray(filteredUpdates.subjects)) {
+      const newSubjects = filteredUpdates.subjects;
+      // Get approved subjects
+      const approvedResult = await pool.query('SELECT name FROM approved_subjects');
+      const approvedNames = new Set(approvedResult.rows.map(r => r.name.toLowerCase()));
+
+      // Find subjects not yet approved
+      for (const subj of newSubjects) {
+        const name = typeof subj === 'string' ? subj : subj.name;
+        if (!approvedNames.has(name.toLowerCase())) {
+          // Queue for admin approval (ignore duplicates)
+          await pool.query(
+            `INSERT INTO pending_subjects (name, book_id, user_id)
+             SELECT $1, $2, $3
+             WHERE NOT EXISTS (
+               SELECT 1 FROM pending_subjects WHERE name = $1 AND status = 'pending'
+             )`,
+            [name, id, userId]
+          );
+        }
+      }
+      // Convert subjects to JSONB format
+      filteredUpdates.subjects = JSON.stringify(newSubjects);
     }
 
     if (isAdmin) {
@@ -434,7 +490,12 @@ async function applyBookUpdate(bookId: string, updates: Record<string, any>, res
   let paramIndex = 1;
 
   for (const [key, val] of Object.entries(updates)) {
-    const finalVal = (key === 'authors' && Array.isArray(val)) ? JSON.stringify(val) : val;
+    let finalVal = val;
+    if (key === 'authors' && Array.isArray(val)) {
+      finalVal = JSON.stringify(val);
+    } else if (key === 'subjects' && Array.isArray(val)) {
+      finalVal = JSON.stringify(val);
+    }
     setClauses.push(`${key} = $${paramIndex}`);
     values.push(finalVal ?? null);
     paramIndex++;
@@ -505,18 +566,33 @@ export const reviewEdit = async (req: AuthRequest, res: Response) => {
     const edit = editResult.rows[0];
 
     if (action === 'approve') {
-      // Apply the changes
+      // Apply the changes — whitelist keys to prevent SQL injection
       const changes = edit.changes;
+      const allowedEditFields = [
+        'title', 'authors', 'isbn', 'lccn', 'publisher', 'published_date',
+        'description', 'page_count', 'language', 'edition', 'width', 'height',
+        'depth', 'dimension_unit', 'weight_unit', 'weight',
+        'price', 'price_published', 'price_currency',
+        'cover_url', 'cover_small_url', 'cover_large_url',
+        'subjects',
+      ];
+
       const setClauses: string[] = [];
       const values: any[] = [];
       let paramIndex = 1;
 
       for (const [key, val] of Object.entries(changes)) {
+        if (!allowedEditFields.includes(key)) continue;
         const finalVal = (key === 'authors' && Array.isArray(val)) ? JSON.stringify(val) : val;
         setClauses.push(`${key} = $${paramIndex}`);
         values.push(finalVal ?? null);
         paramIndex++;
       }
+
+      if (setClauses.length === 0) {
+        return res.status(400).json({ error: 'No valid fields in pending edit' });
+      }
+
       setClauses.push('updated_at = NOW()');
       values.push(edit.book_id);
 
@@ -532,16 +608,15 @@ export const reviewEdit = async (req: AuthRequest, res: Response) => {
         );
       }
 
-      // Clear approved fields from user's personal overrides
-      const overrideKeys = Object.keys(changes);
+      // Clear approved fields from user's personal overrides (parameterized)
+      const overrideKeys = Object.keys(changes).filter(k => allowedEditFields.includes(k));
       const coverFields = ['cover_url', 'cover_small_url', 'cover_large_url'];
       const textKeys = overrideKeys.filter(k => !coverFields.includes(k));
       if (textKeys.length > 0) {
-        const removals = textKeys.map(k => `'${k}'`).join(', ');
         await pool.query(
-          `UPDATE user_books SET overrides = overrides - ARRAY[${removals}]::text[]
-           WHERE user_id = $1 AND book_id = $2`,
-          [edit.user_id, edit.book_id]
+          `UPDATE user_books SET overrides = overrides - $1::text[]
+           WHERE user_id = $2 AND book_id = $3`,
+          [textKeys, edit.user_id, edit.book_id]
         );
       }
       // Clear cover overrides if they match
@@ -762,6 +837,87 @@ export const setImageAsCover = async (req: AuthRequest, res: Response) => {
   } catch (err) {
     console.error('Error setting cover:', err);
     return res.status(500).json({ error: 'Failed to set cover' });
+  }
+};
+
+// Check if a book is already in user's library by code (ISBN, UPC, LCCN)
+export const checkDuplicate = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.session!.getUserId();
+    const code = (req.query.code as string || '').replace(/[-\s]/g, '');
+    if (!code) return res.status(400).json({ error: 'Missing code parameter' });
+
+    // Build ISBN variants
+    const isbnVariants = [code];
+    if (code.length === 10) {
+      const isbn13 = isbn10to13(code);
+      if (isbn13) isbnVariants.push(isbn13);
+    } else if (code.length === 13 && code.startsWith('978')) {
+      const isbn10 = isbn13to10(code);
+      if (isbn10) isbnVariants.push(isbn10);
+    }
+
+    // Check user_books + books for ISBN match
+    let result = await pool.query(
+      `SELECT b.id, b.title, b.authors, b.cover_url FROM books b
+       INNER JOIN user_books ub ON b.id = ub.book_id
+       WHERE ub.user_id = $1 AND b.isbn = ANY($2) LIMIT 1`,
+      [userId, isbnVariants]
+    );
+
+    // Check identifiers JSONB for isbn_10, isbn_13
+    if (result.rows.length === 0) {
+      for (const variant of isbnVariants) {
+        result = await pool.query(
+          `SELECT b.id, b.title, b.authors, b.cover_url FROM books b
+           INNER JOIN user_books ub ON b.id = ub.book_id
+           WHERE ub.user_id = $1 AND (
+             b.identifiers->'isbn_10' @> $2::jsonb OR
+             b.identifiers->'isbn_13' @> $2::jsonb
+           ) LIMIT 1`,
+          [userId, JSON.stringify([variant])]
+        );
+        if (result.rows.length > 0) break;
+      }
+    }
+
+    // Check LCCN column
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT b.id, b.title, b.authors, b.cover_url FROM books b
+         INNER JOIN user_books ub ON b.id = ub.book_id
+         WHERE ub.user_id = $1 AND b.lccn = $2 LIMIT 1`,
+        [userId, code]
+      );
+    }
+
+    // Check LCCN in identifiers
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT b.id, b.title, b.authors, b.cover_url FROM books b
+         INNER JOIN user_books ub ON b.id = ub.book_id
+         WHERE ub.user_id = $1 AND b.identifiers->'lccn' @> $2::jsonb LIMIT 1`,
+        [userId, JSON.stringify([code])]
+      );
+    }
+
+    if (result.rows.length === 0) {
+      return res.json({ duplicate: false });
+    }
+
+    const book = result.rows[0];
+    return res.json({
+      duplicate: true,
+      book: {
+        id: book.id,
+        title: book.title,
+        authors: book.authors,
+        cover_url: book.cover_url,
+      },
+    });
+  } catch (err) {
+    console.error('Error checking duplicate:', err);
+    return res.status(500).json({ error: 'Duplicate check failed' });
   }
 };
 

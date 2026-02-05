@@ -147,6 +147,109 @@ export const vectorSearch = async (queryVector: number[], limit = 20) => {
 };
 
 /**
+ * Keyword search filtered to a specific set of book IDs.
+ */
+export const keywordSearchFiltered = async (query: string, bookIds: string[], limit = 20) => {
+  const { body } = await esClient.search({
+    index: BOOKS_INDEX,
+    body: {
+      size: limit,
+      query: {
+        bool: {
+          filter: [{ terms: { id: bookIds } }],
+          should: [
+            { term: { isbn: { value: query.replace(/-/g, ''), boost: 10 } } },
+            { match_phrase: { 'title.exact': { query, boost: 5 } } },
+            { match: { title: { query, boost: 3 } } },
+            { match: { authors: { query, boost: 2 } } },
+            { match: { description: { query, boost: 1 } } },
+            { match: { subjects: { query, boost: 1 } } },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    },
+  });
+
+  return body.hits.hits.map((hit: any) => ({
+    ...hit._source,
+    _score: hit._score,
+  }));
+};
+
+/**
+ * Vector search filtered to a specific set of book IDs.
+ */
+export const vectorSearchFiltered = async (queryVector: number[], bookIds: string[], limit = 20) => {
+  const { body } = await esClient.search({
+    index: BOOKS_INDEX,
+    body: {
+      size: limit,
+      query: {
+        script_score: {
+          query: {
+            bool: {
+              filter: [
+                { terms: { id: bookIds } },
+                { exists: { field: 'title_vector' } },
+              ],
+            },
+          },
+          script: {
+            source: "cosineSimilarity(params.queryVector, 'title_vector') + 1.0",
+            params: { queryVector },
+          },
+        },
+      },
+    },
+  });
+
+  return body.hits.hits.map((hit: any) => ({
+    ...hit._source,
+    _score: hit._score,
+  }));
+};
+
+/**
+ * Hybrid search filtered to a specific set of book IDs.
+ */
+export const hybridSearchFiltered = async (query: string, queryVector?: number[], bookIds: string[] = [], limit = 20) => {
+  if (!queryVector) {
+    return keywordSearchFiltered(query, bookIds, limit);
+  }
+
+  const [keywordResults, vectorResults] = await Promise.all([
+    keywordSearchFiltered(query, bookIds, limit),
+    vectorSearchFiltered(queryVector, bookIds, limit),
+  ]);
+
+  const scoreMap = new Map<string, { doc: any; kScore: number; vScore: number }>();
+  const maxKScore = keywordResults.length > 0 ? keywordResults[0]._score : 1;
+  const maxVScore = vectorResults.length > 0 ? vectorResults[0]._score : 1;
+
+  for (const doc of keywordResults) {
+    scoreMap.set(doc.id, { doc, kScore: doc._score / maxKScore, vScore: 0 });
+  }
+  for (const doc of vectorResults) {
+    const existing = scoreMap.get(doc.id);
+    const normalizedV = doc._score / maxVScore;
+    if (existing) {
+      existing.vScore = normalizedV;
+    } else {
+      scoreMap.set(doc.id, { doc, kScore: 0, vScore: normalizedV });
+    }
+  }
+
+  return Array.from(scoreMap.values())
+    .map(({ doc, kScore, vScore }) => ({
+      ...doc,
+      _score: kScore * 0.7 + vScore * 0.3,
+    }))
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit);
+};
+
+/**
  * Hybrid search: keyword + optional vector, combined with a weighted sum.
  */
 export const hybridSearch = async (query: string, queryVector?: number[], limit = 20) => {

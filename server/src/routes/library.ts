@@ -7,6 +7,7 @@ import {
   getFeaturedBooks,
   addBookToLibrary,
   lookupBookByCode,
+  checkDuplicate,
   updateBook,
   updateBookLocation,
   getBookImages,
@@ -27,6 +28,7 @@ router.get('/lookup', lookupBookByCode);
 
 // Protected routes
 router.use(verifySession());
+router.get('/check-duplicate', checkDuplicate);
 router.get('/', getUserBooks);
 router.get('/search', searchUserBooks);
 router.get('/book/:id', getBookById);

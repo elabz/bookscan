@@ -77,7 +77,9 @@ describe('library controller', () => {
         .mockResolvedValueOnce({ rows: [] }) // ISBN search
         .mockResolvedValueOnce({ rows: [] }) // identifiers search variant 1
         .mockResolvedValueOnce({ rows: [] }) // identifiers search variant 2
-        .mockResolvedValueOnce({ rows: [] }); // UPC search
+        .mockResolvedValueOnce({ rows: [] }) // UPC search
+        .mockResolvedValueOnce({ rows: [] }) // LCCN column search
+        .mockResolvedValueOnce({ rows: [] }); // LCCN identifiers search
       const res = mockRes();
       await lookupBookByCode(mockReq({ query: { code: '0000000000' } }), res);
       expect(res.status).toHaveBeenCalledWith(404);

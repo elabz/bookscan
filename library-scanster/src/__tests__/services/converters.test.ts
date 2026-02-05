@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { bookToDbFormat, dbBookToAppFormat } from '@/services/converters';
+import { Book } from '@/types/book';
 
 describe('converters', () => {
   describe('bookToDbFormat', () => {
@@ -31,11 +32,44 @@ describe('converters', () => {
       expect(db.page_count).toBe(300);
     });
 
+    it('converts dimension and price fields to DB format', () => {
+      const book = {
+        title: 'Test',
+        authors: ['Author'],
+        width: '150',
+        height: '220',
+        depth: '25',
+        dimensionUnit: 'mm' as const,
+        weight: '400',
+        weightUnit: 'g' as const,
+        price: '19.99',
+        pricePublished: '24.99',
+        priceCurrency: 'USD',
+      };
+
+      const db = bookToDbFormat(book);
+      expect(db.width).toBe('150');
+      expect(db.height).toBe('220');
+      expect(db.depth).toBe('25');
+      expect(db.dimension_unit).toBe('mm');
+      expect(db.weight).toBe('400');
+      expect(db.weight_unit).toBe('g');
+      expect(db.price).toBe('19.99');
+      expect(db.price_published).toBe('24.99');
+      expect(db.price_currency).toBe('USD');
+    });
+
     it('handles null/undefined fields', () => {
-      const db = bookToDbFormat({ title: 'T', authors: [] } as any);
+      const db = bookToDbFormat({ title: 'T', authors: [] } as Book);
       expect(db.isbn).toBeNull();
       expect(db.cover_url).toBeNull();
       expect(db.publisher).toBeNull();
+      expect(db.depth).toBeNull();
+      expect(db.dimension_unit).toBeNull();
+      expect(db.weight_unit).toBeNull();
+      expect(db.price).toBeNull();
+      expect(db.price_published).toBeNull();
+      expect(db.price_currency).toBeNull();
     });
   });
 
@@ -92,6 +126,34 @@ describe('converters', () => {
       const genres = [{ id: 1, name: 'Fiction' }];
       const book = dbBookToAppFormat(row, genres);
       expect(book.genres).toEqual(genres);
+    });
+
+    it('converts dimension and price fields from DB format', () => {
+      const row = {
+        id: 'b1',
+        title: 'Test',
+        authors: ['Author'],
+        width: '150',
+        height: '220',
+        depth: '25',
+        dimension_unit: 'mm',
+        weight: '400',
+        weight_unit: 'g',
+        price: '19.99',
+        price_published: '24.99',
+        price_currency: 'USD',
+      };
+
+      const book = dbBookToAppFormat(row);
+      expect(book.width).toBe('150');
+      expect(book.height).toBe('220');
+      expect(book.depth).toBe('25');
+      expect(book.dimensionUnit).toBe('mm');
+      expect(book.weight).toBe('400');
+      expect(book.weightUnit).toBe('g');
+      expect(book.price).toBe('19.99');
+      expect(book.pricePublished).toBe('24.99');
+      expect(book.priceCurrency).toBe('USD');
     });
   });
 });

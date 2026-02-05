@@ -47,6 +47,7 @@ export interface Book {
   title: string;
   authors: string[];
   isbn?: string;
+  lccn?: string;
   cover?: string;
   coverSmall?: string;     // Small cover variant
   coverLarge?: string;     // Large cover variant
@@ -94,6 +95,49 @@ export interface BookImage {
   sort_order: number;
   caption?: string;
   created_at: string;
+}
+
+// Database row shape (snake_case) returned by API endpoints
+export interface DbBookRow {
+  id: string;
+  title: string;
+  authors: string[];
+  isbn?: string;
+  lccn?: string;
+  cover_url?: string;
+  cover_small_url?: string;
+  cover_large_url?: string;
+  user_cover_url?: string;
+  user_cover_small_url?: string;
+  user_cover_large_url?: string;
+  user_overrides?: Record<string, string | string[] | number>;
+  publisher?: string;
+  published_date?: string;
+  description?: string;
+  page_count?: number;
+  categories?: string[];
+  language?: string;
+  edition?: string;
+  width?: string;
+  height?: string;
+  depth?: string;
+  dimension_unit?: string;
+  weight_unit?: string;
+  price?: string;
+  price_published?: string;
+  price_currency?: string;
+  identifiers?: Identifier;
+  classifications?: Classification;
+  links?: Link[];
+  weight?: string;
+  url?: string;
+  subjects?: { name: string; url?: string }[];
+  publish_places?: PublishPlace[];
+  excerpts?: BookExcerpt[];
+  number_of_pages?: number;
+  location_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface BookSearchResult {

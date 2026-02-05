@@ -1,9 +1,10 @@
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { useToast } from '@/components/ui/use-toast';
 import { useNavigate } from 'react-router-dom';
-import { fetchBookByISBN } from '@/services/isbnService';
+import { fetchBookByCode, checkDuplicateInLibrary } from '@/services/isbnService';
+import { searchSimilarInLibrary } from '@/services/searchService';
 import { addBook } from '@/services/bookService';
 import { updateBookLocation } from '@/services/locationService';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +17,8 @@ import { BookDetailsCard } from '@/components/scan/BookDetailsCard';
 import { BookEditor } from '@/components/scan/BookEditor';
 import { BookNotFoundMessage } from '@/components/scan/BookNotFoundMessage';
 import { ScanPageHeader, ScanPageFooter } from '@/components/scan/ScanPageHeader';
+import { DuplicateBookDialog } from '@/components/scan/DuplicateBookDialog';
+import { SimilarBooksCard } from '@/components/scan/SimilarBooksCard';
 
 const LOCATION_STORAGE_KEY = 'addBook_selectedLocationId';
 
@@ -34,6 +37,15 @@ const ScanPage = () => {
     sessionStorage.getItem(LOCATION_STORAGE_KEY) || null
   );
 
+  // Duplicate detection state
+  const [duplicateBook, setDuplicateBook] = useState<{ id: string; title: string; authors: string[]; cover_url?: string } | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+
+  // Similar books state
+  const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
+  const similarBooksRef = useRef<HTMLDivElement>(null);
+
   const handleLocationChange = (locId: string | null) => {
     setSelectedLocationId(locId);
     if (locId) {
@@ -42,16 +54,45 @@ const ScanPage = () => {
       sessionStorage.removeItem(LOCATION_STORAGE_KEY);
     }
   };
-  
+
   const resetScanState = () => {
     setFoundBook(null);
     setIsBookNotFound(false);
     setScanFailed(false);
     setLastScannedIsbn("");
+    setDuplicateBook(null);
+    setShowDuplicateDialog(false);
+    setSimilarBooks([]);
+    setIsLoadingSimilar(false);
   };
 
   const handleScanFailed = () => {
     setScanFailed(true);
+  };
+
+  const startSimilarSearch = async (book: Book) => {
+    if (!userId) return;
+    setIsLoadingSimilar(true);
+    try {
+      // Build a rich text string from book metadata for similarity matching
+      const parts = [
+        book.title,
+        book.authors?.join(', '),
+        book.subjects?.map(s => typeof s === 'string' ? s : s.name).join(', '),
+        book.publisher,
+        book.description?.slice(0, 200),
+      ].filter(Boolean);
+      const text = parts.join(' ');
+
+      const results = await searchSimilarInLibrary(text, 5);
+      // Filter out the scanned book itself
+      const filtered = results.filter(b => b.id !== book.id);
+      setSimilarBooks(filtered);
+    } catch (error) {
+      console.error('Error searching similar books:', error);
+    } finally {
+      setIsLoadingSimilar(false);
+    }
   };
 
   const handleIsbnSearch = async (isbn: string, upc?: string) => {
@@ -61,27 +102,43 @@ const ScanPage = () => {
     setFoundBook(null);
     setIsBookNotFound(false);
     setLastScannedIsbn(isbn);
+    setSimilarBooks([]);
+    setIsLoadingSimilar(false);
 
     try {
       toast({
         title: "Searching...",
-        description: `Looking up ISBN: ${isbn}`,
+        description: `Looking up: ${isbn}`,
       });
 
-      // Pass the raw ISBN and optional UPC (from manual entry after UPC scan)
-      const bookData = await fetchBookByISBN(isbn, upc);
-      
+      // Check for duplicate in user's library first
+      if (userId) {
+        const dupResult = await checkDuplicateInLibrary(isbn);
+        if (dupResult.duplicate && dupResult.book) {
+          setDuplicateBook(dupResult.book);
+          setShowDuplicateDialog(true);
+          setIsSearching(false);
+          return;
+        }
+      }
+
+      // Use unified code lookup (handles ISBN, LCCN, UPC)
+      const bookData = await fetchBookByCode(isbn, upc);
+
       if (bookData) {
         setFoundBook(bookData);
         toast({
           title: "Book Found!",
           description: `"${bookData.title}" by ${bookData.authors?.[0] || 'Unknown Author'}`,
         });
+
+        // Fire async similar books search
+        startSimilarSearch(bookData);
       } else {
         setIsBookNotFound(true);
         toast({
           title: "Book Not Found",
-          description: "We couldn't find a book with that ISBN. Please check the number and try again.",
+          description: "We couldn't find a book with that code. Please check and try again.",
           variant: "destructive",
         });
       }
@@ -108,7 +165,7 @@ const ScanPage = () => {
       });
       return;
     }
-    
+
     if (!userId) {
       toast({
         title: "Authentication Required",
@@ -118,9 +175,9 @@ const ScanPage = () => {
       navigate('/login');
       return;
     }
-    
+
     setIsAddingToLibrary(true);
-    
+
     try {
       console.log('Adding book to library with userId:', userId);
       const addedBook = await addBook(foundBook, userId);
@@ -136,7 +193,7 @@ const ScanPage = () => {
         title: "Success!",
         description: `"${addedBook.title}" has been added to your library`,
       });
-      
+
       navigate('/library');
     } catch (error) {
       console.error('Failed to add book:', error);
@@ -150,11 +207,15 @@ const ScanPage = () => {
     }
   };
 
+  const handleScrollToSimilar = () => {
+    similarBooksRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   return (
     <PageLayout>
       <div className="max-w-3xl mx-auto px-6 py-12">
         <ScanPageHeader />
-        
+
         {!foundBook && !isEditing && !isBookNotFound && (
           <>
             {!scanFailed && (
@@ -169,7 +230,7 @@ const ScanPage = () => {
             />
           </>
         )}
-        
+
         {isBookNotFound && !foundBook && (
           <BookNotFoundMessage
             onRescan={resetScanState}
@@ -177,11 +238,11 @@ const ScanPage = () => {
             isbnScanned={lastScannedIsbn}
           />
         )}
-        
+
         {isEditing && foundBook && (
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-8">
             <h2 className="text-xl font-medium mb-4">Edit Book Details</h2>
-            <BookEditor 
+            <BookEditor
               book={foundBook}
               onSave={(updatedBook) => {
                 setFoundBook(updatedBook);
@@ -194,18 +255,37 @@ const ScanPage = () => {
             />
           </div>
         )}
-        
+
         {foundBook && !isEditing && !isBookNotFound && (
-          <BookDetailsCard
-            book={foundBook}
-            onAddToLibrary={handleAddToLibrary}
-            onEditBook={() => setIsEditing(true)}
-            isAddingToLibrary={isAddingToLibrary}
-            selectedLocationId={selectedLocationId}
-            onLocationChange={handleLocationChange}
+          <>
+            <BookDetailsCard
+              book={foundBook}
+              onAddToLibrary={handleAddToLibrary}
+              onEditBook={() => setIsEditing(true)}
+              isAddingToLibrary={isAddingToLibrary}
+              selectedLocationId={selectedLocationId}
+              onLocationChange={handleLocationChange}
+              hasSimilarBooks={similarBooks.length > 0}
+              onScrollToSimilar={handleScrollToSimilar}
+            />
+            <SimilarBooksCard
+              ref={similarBooksRef}
+              books={similarBooks}
+              isLoading={isLoadingSimilar}
+            />
+          </>
+        )}
+
+        {/* Duplicate book dialog */}
+        {duplicateBook && (
+          <DuplicateBookDialog
+            open={showDuplicateDialog}
+            book={duplicateBook}
+            onScanAnother={resetScanState}
+            onGoToLibrary={() => navigate('/library')}
           />
         )}
-        
+
         <ScanPageFooter />
       </div>
     </PageLayout>

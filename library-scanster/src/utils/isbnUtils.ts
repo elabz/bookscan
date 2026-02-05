@@ -137,6 +137,36 @@ export const isbn13ToIsbn10 = (isbn13: string): string | null => {
 };
 
 /**
+ * Normalizes an LCCN by stripping hyphens, spaces, and lowercasing.
+ */
+export const normalizeLccn = (lccn: string): string => {
+  return lccn.replace(/[-\s]/g, '').toLowerCase().trim();
+};
+
+/**
+ * Detects if a code looks like an LCCN.
+ * LCCN patterns:
+ * - 1-3 alpha prefix followed by digits (e.g., "n78890351", "agr64000200")
+ * - Pure numeric 8-12 digits that fail ISBN validation (e.g., "78308782")
+ * - Formatted with hyphens (e.g., "78-308782")
+ */
+export const isLccn = (code: string): boolean => {
+  const normalized = normalizeLccn(code);
+
+  // Alpha prefix + digits pattern (1-3 letters followed by digits)
+  if (/^[a-z]{1,3}\d{4,10}$/.test(normalized)) return true;
+
+  // Pure numeric: 8-12 digits that is NOT a valid ISBN or UPC
+  if (/^\d{8,12}$/.test(normalized)) {
+    if (isValidIsbn(normalized)) return false;
+    if (isUpc(normalized)) return false;
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Formats an ISBN with proper hyphens based on standard
  */
 export const formatIsbn = (isbn: string): string => {
