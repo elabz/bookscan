@@ -3,34 +3,66 @@ import { SessionRequest } from 'supertokens-node/framework/express';
 import { pool } from '../config/db';
 import { processAndUploadCover } from '../services/imageProcessor';
 import { indexBook } from '../services/searchService';
+import {
+  fetchFromOpenLibraryByCode,
+  getOpenLibraryCoverUrl,
+  OpenLibraryBook,
+} from '../services/openLibraryService';
+import { isbn10to13, isbn13to10, isLccn, normalizeLccn } from '../utils/isbnUtils';
 
 type AuthRequest = SessionRequest;
 
-// Convert ISBN-10 to ISBN-13
-const isbn10to13 = (isbn10: string): string | null => {
-  if (isbn10.length !== 10) return null;
-  const base = '978' + isbn10.slice(0, 9);
-  let sum = 0;
-  for (let i = 0; i < 12; i++) {
-    sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
-  }
-  const check = (10 - (sum % 10)) % 10;
-  return base + check;
+// Helper: generate a short unique ID
+const generateId = (): string => Math.random().toString(36).substring(2, 9);
+
+// Helper: ingest a book from OpenLibrary into local database
+const ingestBook = async (book: OpenLibraryBook): Promise<any> => {
+  const id = generateId();
+
+  const result = await pool.query(
+    `INSERT INTO books (
+      id, title, authors, isbn, lccn, cover_url, cover_small_url, cover_large_url,
+      publisher, published_date, description, page_count, categories, language,
+      identifiers, classifications, links, weight,
+      url, subjects, publish_places, excerpts, number_of_pages,
+      created_at, updated_at
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+      $17, $18, $19, $20, $21, $22, $23, NOW(), NOW()
+    )
+    ON CONFLICT (isbn) DO UPDATE SET updated_at = NOW()
+    RETURNING *`,
+    [
+      id,
+      book.title,
+      JSON.stringify(book.authors),
+      book.isbn || null,
+      book.lccn || null,
+      book.cover_url || null,
+      book.cover_small_url || null,
+      book.cover_large_url || null,
+      book.publisher || null,
+      book.published_date || null,
+      book.description || null,
+      book.page_count || null,
+      book.categories ? JSON.stringify(book.categories) : null,
+      book.language || null,
+      book.identifiers ? JSON.stringify(book.identifiers) : null,
+      book.classifications ? JSON.stringify(book.classifications) : null,
+      book.links ? JSON.stringify(book.links) : null,
+      book.weight || null,
+      book.url || null,
+      book.subjects ? JSON.stringify(book.subjects) : null,
+      book.publish_places ? JSON.stringify(book.publish_places) : null,
+      book.excerpts ? JSON.stringify(book.excerpts) : null,
+      book.number_of_pages || null,
+    ]
+  );
+
+  return result.rows[0];
 };
 
-// Convert ISBN-13 to ISBN-10
-const isbn13to10 = (isbn13: string): string | null => {
-  if (isbn13.length !== 13 || !isbn13.startsWith('978')) return null;
-  const base = isbn13.slice(3, 12);
-  let sum = 0;
-  for (let i = 0; i < 9; i++) {
-    sum += parseInt(base[i]) * (10 - i);
-  }
-  const check = (11 - (sum % 11)) % 11;
-  return base + (check === 10 ? 'X' : check.toString());
-};
-
-// Lookup a book by ISBN or UPC in local database
+// Lookup a book by ISBN or UPC in local database, auto-ingest from OpenLibrary if not found
 export const lookupBookByCode = async (req: SessionRequest, res: Response) => {
   try {
     const code = (req.query.code as string || '').replace(/[-\s]/g, '');
@@ -84,10 +116,11 @@ export const lookupBookByCode = async (req: SessionRequest, res: Response) => {
     }
 
     // Search by LCCN (top-level column)
-    if (result.rows.length === 0) {
+    if (result.rows.length === 0 && isLccn(code)) {
+      const normalized = normalizeLccn(code);
       result = await pool.query(
         "SELECT * FROM books WHERE lccn = $1 LIMIT 1",
-        [code]
+        [normalized]
       );
     }
 
@@ -99,11 +132,46 @@ export const lookupBookByCode = async (req: SessionRequest, res: Response) => {
       );
     }
 
-    if (result.rows.length === 0) {
+    // Found in local DB — return it
+    if (result.rows.length > 0) {
+      console.log(`[LOOKUP] Found book in local DB for code: ${code}`);
+      return res.json(result.rows[0]);
+    }
+
+    // ─── Not found locally: fetch from OpenLibrary and auto-ingest ───────
+    console.log(`[LOOKUP] Book not found locally, fetching from OpenLibrary: ${code}`);
+
+    const olBook = await fetchFromOpenLibraryByCode(code);
+    if (!olBook) {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    return res.json(result.rows[0]);
+    // Process cover image synchronously (user waits for this)
+    const isbnForCover = olBook.isbn || code;
+    if (isbnForCover) {
+      try {
+        const coverSourceUrl = getOpenLibraryCoverUrl(isbnForCover);
+        console.log(`[LOOKUP] Processing cover from: ${coverSourceUrl}`);
+        const urls = await processAndUploadCover(coverSourceUrl, isbnForCover);
+        olBook.cover_url = urls.cover_url;
+        olBook.cover_small_url = urls.cover_small_url;
+        olBook.cover_large_url = urls.cover_large_url;
+      } catch (err) {
+        console.error(`[LOOKUP] Cover processing failed for ${isbnForCover}:`, err);
+        // Continue without cover — don't fail the whole request
+      }
+    }
+
+    // Insert into database
+    const insertedBook = await ingestBook(olBook);
+    console.log(`[LOOKUP] Auto-ingested book: ${insertedBook.id} - ${insertedBook.title}`);
+
+    // Index in Elasticsearch asynchronously (fire-and-forget)
+    indexBook(insertedBook).catch((err) =>
+      console.error(`[INDEX_FAILED] ${insertedBook.id}:`, err.message)
+    );
+
+    return res.json(insertedBook);
   } catch (err) {
     console.error('Error looking up book by code:', err);
     return res.status(500).json({ error: 'Lookup failed' });

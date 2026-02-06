@@ -9,7 +9,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
-import { ScanBarcode } from 'lucide-react';
+import { ScanBarcode, BookOpen } from 'lucide-react';
 
 interface DuplicateBookDialogProps {
   open: boolean;
@@ -41,14 +41,33 @@ export const DuplicateBookDialog = ({
         <AlertDialogHeader>
           <AlertDialogTitle>Already in Your Library</AlertDialogTitle>
           <AlertDialogDescription asChild>
-            <div className="space-y-2">
-              <p>
-                <span className="font-medium text-foreground">{book.title}</span>
-                {book.authors?.length > 0 && (
-                  <span> by {book.authors.join(', ')}</span>
+            <div className="flex gap-4 items-start pt-2">
+              {/* Book cover */}
+              <div className="flex-shrink-0 w-16 h-24 rounded overflow-hidden bg-muted">
+                {book.cover_url ? (
+                  <img
+                    src={book.cover_url}
+                    alt={book.title}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <BookOpen className="w-8 h-8 text-muted-foreground" />
+                  </div>
                 )}
-              </p>
-              <p>This book is already in your library.</p>
+              </div>
+              {/* Book info */}
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="font-medium text-foreground line-clamp-2">{book.title}</p>
+                {book.authors?.length > 0 && (
+                  <p className="text-sm text-muted-foreground line-clamp-1">
+                    {book.authors.join(', ')}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground pt-1">
+                  This book is already in your library.
+                </p>
+              </div>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>

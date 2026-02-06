@@ -17,6 +17,10 @@ jest.mock('../../services/imageProcessor', () => ({
 jest.mock('../../services/searchService', () => ({
   indexBook: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('../../services/openLibraryService', () => ({
+  fetchFromOpenLibraryByCode: jest.fn().mockResolvedValue(null),
+  getOpenLibraryCoverUrl: jest.fn().mockReturnValue('http://covers.openlibrary.org/b/isbn/test-L.jpg'),
+}));
 
 import {
   lookupBookByCode,

@@ -80,4 +80,22 @@ describe('DuplicateBookDialog', () => {
 
     expect(screen.queryByText('Already in Your Library')).not.toBeInTheDocument();
   });
+
+  it('renders book cover image when cover_url is provided', () => {
+    render(<DuplicateBookDialog {...defaultProps} />);
+
+    const coverImage = screen.getByRole('img', { name: 'Test Book' });
+    expect(coverImage).toBeInTheDocument();
+    expect(coverImage).toHaveAttribute('src', 'https://example.com/cover.jpg');
+  });
+
+  it('renders placeholder icon when cover_url is not provided', () => {
+    const noCoverBook = { ...mockBook, cover_url: undefined };
+    render(<DuplicateBookDialog {...defaultProps} book={noCoverBook} />);
+
+    // Should not have an img element
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    // The BookOpen icon should be rendered (it's an SVG)
+    expect(screen.getByText('Test Book')).toBeInTheDocument();
+  });
 });
