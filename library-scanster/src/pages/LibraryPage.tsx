@@ -1,21 +1,18 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import React from 'react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { BookGrid } from '@/components/books/BookGrid';
-import { BookSearch } from '@/components/books/BookSearch';
-import { GenreFilter } from '@/components/books/GenreFilter';
 import { LibraryStats } from '@/components/library/LibraryStats';
-import { LibraryFilters } from '@/components/library/LibraryFilters';
+import { LibraryToolbar } from '@/components/library/LibraryToolbar';
 import { Book as BookType } from '@/types/book';
-import { X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { getUserBooks, searchUserBooks } from '@/services/libraryService';
 import { useToast } from '@/hooks/use-toast';
 import { getAllGenres, getBookGenres } from '@/services/genreService';
-import { Badge } from '@/components/ui/badge';
+import { getLocations, getLocationWithDescendantIds } from '@/services/locationService';
 
 const LibraryPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -23,7 +20,6 @@ const LibraryPage = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const { userId, isSignedIn } = useAuth();
   const { toast } = useToast();
@@ -47,6 +43,13 @@ const LibraryPage = () => {
   } = useQuery({
     queryKey: ['genres'],
     queryFn: getAllGenres
+  });
+
+  // Fetch locations for hierarchy-aware filtering
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations'],
+    queryFn: getLocations,
+    enabled: isSignedIn
   });
 
   // Fetch books from the API
@@ -90,8 +93,16 @@ const LibraryPage = () => {
 
   // Derive displayed books from state without extra setState calls
   const displayedBooks = React.useMemo(() => {
-    let result = isSearching ? filteredBooks : books;
+    // Use filtered books if there's an active search query
+    let result = searchQuery.trim() ? filteredBooks : books;
 
+    // Filter by location (includes all child locations in hierarchy)
+    if (selectedLocationId && locations.length > 0) {
+      const locationIds = getLocationWithDescendantIds(selectedLocationId, locations);
+      result = result.filter(book => book.location_id && locationIds.includes(book.location_id));
+    }
+
+    // Filter by genres
     if (selectedGenres.length > 0) {
       result = result.filter(book =>
         book.genres?.some(genre => selectedGenres.includes(genre.id))
@@ -108,20 +119,20 @@ const LibraryPage = () => {
     }
 
     return result;
-  }, [books, filteredBooks, isSearching, selectedGenres, selectedSubject]);
+  }, [books, filteredBooks, searchQuery, selectedLocationId, locations, selectedGenres, selectedSubject]);
 
   const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+
     if (!query.trim()) {
       setFilteredBooks([]);
-      setSearchQuery('');
       setIsSearching(false);
       return;
     }
 
     try {
       setIsSearching(true);
-      setSearchQuery(query);
-      let results = await searchUserBooks(query);
+      const results = await searchUserBooks(query);
 
       // Fetch genres for each book
       for (const book of results) {
@@ -139,63 +150,38 @@ const LibraryPage = () => {
         description: "There was an error searching your library",
         variant: "destructive"
       });
+    } finally {
+      setIsSearching(false);
     }
-  };
-
-  const handleGenreFilter = (genreIds: number[]) => {
-    setSelectedGenres(genreIds);
   };
 
   return (
     <PageLayout>
       <div className="max-w-7xl mx-auto px-6">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 md:p-8 shadow-sm mb-8 mt-4">
-          <div className="mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold mb-2">My Library</h1>
-            <p className="text-muted-foreground">
-              {books.length} book{books.length !== 1 ? 's' : ''} in your collection
-            </p>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <BookSearch
-              onSearch={handleSearch}
-              isLoading={isSearching}
-              placeholder="Search your library..."
-              className="md:max-w-md w-full"
-            />
-
-            <GenreFilter
-              genres={genres}
-              selectedGenres={selectedGenres}
-              onSelectGenres={handleGenreFilter}
-              isLoading={genresLoading || booksLoading}
-            />
-          </div>
-
-          <LibraryFilters
-            selectedLocationId={selectedLocationId}
-            selectedCollectionId={selectedCollectionId}
-            onLocationChange={setSelectedLocationId}
-            onCollectionChange={setSelectedCollectionId}
-          />
-
-          {/* Active subject filter */}
-          {selectedSubject && (
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Filtered by subject:</span>
-              <Badge variant="secondary" className="flex items-center gap-1 pr-1">
-                {selectedSubject}
-                <button
-                  onClick={clearSubjectFilter}
-                  className="ml-1 rounded-full p-0.5 hover:bg-muted"
-                  aria-label="Clear subject filter"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
+        {/* Header section */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-6 mt-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+            <div>
+              <h1 className="text-2xl font-bold">My Library</h1>
+              <p className="text-sm text-muted-foreground">
+                {books.length} book{books.length !== 1 ? 's' : ''} in your collection
+              </p>
             </div>
-          )}
+          </div>
+
+          {/* Unified filter toolbar */}
+          <LibraryToolbar
+            onSearch={handleSearch}
+            isSearching={isSearching}
+            selectedLocationId={selectedLocationId}
+            onLocationChange={setSelectedLocationId}
+            genres={genres}
+            selectedGenres={selectedGenres}
+            onGenreChange={setSelectedGenres}
+            genresLoading={genresLoading}
+            selectedSubject={selectedSubject}
+            onClearSubject={clearSubjectFilter}
+          />
         </div>
 
         <LibraryStats />
@@ -203,7 +189,7 @@ const LibraryPage = () => {
         <div className="mb-16">
           <BookGrid
             books={displayedBooks}
-            isLoading={booksLoading || isSearching}
+            isLoading={booksLoading}
             emptyMessage={
               searchQuery
                 ? `No books found matching "${searchQuery}"`

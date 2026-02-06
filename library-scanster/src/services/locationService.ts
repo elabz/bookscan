@@ -78,3 +78,24 @@ export function buildLocationTree(locations: Location[]): Location[] {
 
   return roots;
 }
+
+/**
+ * Get all descendant location IDs for a given location (including itself).
+ * This is useful for filtering books when a parent location is selected.
+ */
+export function getLocationWithDescendantIds(locationId: string, locations: Location[]): string[] {
+  const ids: string[] = [locationId];
+
+  // Find all children recursively
+  const findChildren = (parentId: string) => {
+    for (const loc of locations) {
+      if (loc.parent_id === parentId) {
+        ids.push(loc.id);
+        findChildren(loc.id);
+      }
+    }
+  };
+
+  findChildren(locationId);
+  return ids;
+}

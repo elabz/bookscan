@@ -25,6 +25,10 @@ export const BookEditor: React.FC<BookEditorProps> = ({ book, onSave }) => {
     width: book.width || '',
     height: book.height || '',
   });
+
+  const [subjects, setSubjects] = useState<{ name: string }[]>(
+    book.subjects || []
+  );
   
   const [coverUrls, setCoverUrls] = useState({
     coverUrl: book.cover || '',
@@ -83,9 +87,10 @@ export const BookEditor: React.FC<BookEditorProps> = ({ book, onSave }) => {
       coverSmall: coverUrls.coverSmallUrl,
       coverLarge: coverUrls.coverLargeUrl,
       width: formData.width || undefined,
-      height: formData.height || undefined
+      height: formData.height || undefined,
+      subjects: subjects
     };
-    
+
     onSave(updatedBook);
   };
 
@@ -106,7 +111,9 @@ export const BookEditor: React.FC<BookEditorProps> = ({ book, onSave }) => {
         <div className="col-span-2 space-y-4">
           <BookEditorForm
             formData={formData}
+            subjects={subjects}
             onChange={handleFormChange}
+            onSubjectsChange={setSubjects}
           />
         </div>
       </div>
