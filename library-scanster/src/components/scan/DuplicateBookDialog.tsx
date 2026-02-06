@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -8,6 +9,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '@/components/ui/alert-dialog';
+import { ScanBarcode } from 'lucide-react';
 
 interface DuplicateBookDialogProps {
   open: boolean;
@@ -22,6 +24,17 @@ export const DuplicateBookDialog = ({
   onScanAnother,
   onGoToLibrary,
 }: DuplicateBookDialogProps) => {
+  const scanButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Auto-focus the "Scan Another" button when dialog opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        scanButtonRef.current?.focus();
+      }, 100);
+    }
+  }, [open]);
+
   return (
     <AlertDialog open={open}>
       <AlertDialogContent>
@@ -43,8 +56,9 @@ export const DuplicateBookDialog = ({
           <AlertDialogCancel onClick={onGoToLibrary}>
             Go to Library
           </AlertDialogCancel>
-          <AlertDialogAction onClick={onScanAnother}>
-            Scan Another Book
+          <AlertDialogAction ref={scanButtonRef} onClick={onScanAnother}>
+            <ScanBarcode className="mr-2 h-4 w-4" />
+            Scan Next Book
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookPlus, Loader2, Scan, AlertTriangle, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +7,7 @@ import { useAddBook } from '@/components/books/AddBookProvider';
 import { BookNotFoundMessage } from '@/components/scan/BookNotFoundMessage';
 import { LocationPicker } from '@/components/library/LocationPicker';
 import { EditableBookForm } from '@/components/scan/EditableBookForm';
+import { DuplicateBookDialog } from '@/components/scan/DuplicateBookDialog';
 import { Book } from '@/types/book';
 import { isbn13ToIsbn10 } from '@/utils/isbnUtils';
 
@@ -13,13 +15,18 @@ interface HardwareScannerTabProps {
   selectedLocationId: string | null;
   onLocationChange: (locId: string | null) => void;
   onSwitchToManual?: (isbn13?: string, isbn10?: string) => void;
+  isActive?: boolean;
+  inputRef?: React.RefObject<HTMLInputElement>;
 }
 
 export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
   selectedLocationId,
   onLocationChange,
   onSwitchToManual,
+  isActive = true,
+  inputRef: externalInputRef,
 }) => {
+  const navigate = useNavigate();
   const {
     isSearching,
     foundBook,
@@ -28,6 +35,9 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
     handleAddAndScanAnother,
     isSubmitting,
     setFoundBook,
+    duplicateBook,
+    showDuplicateDialog,
+    dismissDuplicateDialog,
   } = useAddBook();
 
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -37,13 +47,19 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
   const [showWrongBook, setShowWrongBook] = useState(false);
   const [wrongBookQuery, setWrongBookQuery] = useState('');
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = externalInputRef || internalInputRef;
   const addButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Auto-focus input on mount
+  // Focus input when tab becomes active
   useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+    if (isActive && !foundBook && !isBookNotFound) {
+      // Use requestAnimationFrame to ensure focus happens after Radix tab animations
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+    }
+  }, [isActive, foundBook, isBookNotFound]);
 
   // Focus "Add & Scan Another" button when book is found
   useEffect(() => {
@@ -56,36 +72,48 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
   }, [foundBook, isSubmitting]);
 
   // Global keydown listener for quick re-scan while viewing book
+  // Detects rapid barcode scanner input even when focus is in a form field
   useEffect(() => {
     if (!foundBook) return;
 
     let buffer = '';
     let lastKeyTime = 0;
+    let inputStartValue = '';
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input/textarea
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-
       const now = Date.now();
+      const target = e.target as HTMLInputElement;
+      const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
-      // Hardware scanners type very fast (< 50ms between chars)
-      // Reset buffer if too much time passed
-      if (now - lastKeyTime > 100) {
+      // Reset buffer if too much time passed (human typing speed)
+      // Hardware scanners type at < 50ms between chars; 150ms allows some margin
+      if (now - lastKeyTime > 150) {
         buffer = '';
+        // Remember the input value when starting fresh
+        if (isInInput && target.value !== undefined) {
+          inputStartValue = target.value;
+        }
       }
       lastKeyTime = now;
 
+      // Accumulate barcode characters
+      if (e.key.length === 1 && /[\d\-Xx]/.test(e.key)) {
+        buffer += e.key;
+      }
+
+      // On Enter with valid barcode-length buffer, treat as scanner input
       if (e.key === 'Enter' && buffer.length >= 10) {
         e.preventDefault();
-        const scannedIsbn = buffer.trim();
+        e.stopPropagation();
+        const scannedIsbn = buffer.replace(/[-\s]/g, '');
         buffer = '';
+
+        // If we were in an input, restore its original value (remove the scanned chars)
+        if (isInInput && target.value !== undefined) {
+          target.value = inputStartValue;
+          // Dispatch input event so React state updates
+          target.dispatchEvent(new Event('input', { bubbles: true }));
+        }
 
         // If same ISBN scanned, add book and prepare for next
         if (scannedIsbn === lastScannedIsbn && foundBook) {
@@ -94,13 +122,11 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
           // Different ISBN, search for it
           handleScan(scannedIsbn);
         }
-      } else if (e.key.length === 1 && /[\d\-Xx]/.test(e.key)) {
-        buffer += e.key;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true); // Use capture phase
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [foundBook, lastScannedIsbn, handleAddAndScanAnother]);
 
   const handleBookFormChange = useCallback(
@@ -176,10 +202,27 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
     }
   };
 
+  // Duplicate dialog wrapper - shown on any view
+  const duplicateDialog = duplicateBook && (
+    <DuplicateBookDialog
+      open={showDuplicateDialog}
+      book={duplicateBook}
+      onScanAnother={() => {
+        dismissDuplicateDialog();
+        resetScanState();
+      }}
+      onGoToLibrary={() => {
+        dismissDuplicateDialog();
+        navigate('/library');
+      }}
+    />
+  );
+
   // Scanner input view (no book found yet)
   if (!foundBook && !isBookNotFound) {
     return (
       <div className="animate-slide-up">
+        {duplicateDialog}
         <div className="bg-white dark:bg-gray-800 rounded-xl p-8 shadow-sm text-center">
           <div className="mb-6">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
@@ -201,7 +244,6 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
                 placeholder="Scan or enter ISBN..."
                 className="font-mono text-center text-lg h-12"
                 autoComplete="off"
-                autoFocus
               />
               <Button
                 type="submit"
@@ -235,7 +277,9 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
   // Book not found view
   if (isBookNotFound && !foundBook) {
     return (
-      <BookNotFoundMessage
+      <>
+        {duplicateDialog}
+        <BookNotFoundMessage
         onRescan={resetScanState}
         onIsbnSubmit={handleScan}
         onAddManually={
@@ -256,17 +300,19 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
         }
         isbnScanned={lastScannedIsbn}
       />
+      </>
     );
   }
 
   // Book found view
   return (
     <div className="animate-slide-up">
+      {duplicateDialog}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-8 overflow-hidden">
         {/* Header: Cover + Title + Add Button */}
-        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/5 to-transparent border-b">
+        <div className="flex items-center gap-4 p-4">
           {/* Cover thumbnail */}
-          <div className="shrink-0 w-20 h-28 rounded-md overflow-hidden bg-muted shadow-md">
+          <div className="shrink-0 w-16 h-24 rounded-md overflow-hidden bg-muted shadow-sm">
             {foundBook!.cover ? (
               <img
                 src={foundBook!.cover}
@@ -275,7 +321,7 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <BookPlus className="h-8 w-8 text-muted-foreground/50" />
+                <BookPlus className="h-6 w-6 text-muted-foreground/50" />
               </div>
             )}
           </div>
@@ -286,9 +332,6 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
             <p className="text-sm text-muted-foreground truncate">
               {foundBook!.authors?.join(', ') || 'Unknown Author'}
             </p>
-            <p className="text-xs text-muted-foreground mt-1 font-mono">
-              {foundBook!.isbn}
-            </p>
           </div>
 
           {/* Add Button - prominent */}
@@ -296,32 +339,31 @@ export const HardwareScannerTab: React.FC<HardwareScannerTabProps> = ({
             ref={addButtonRef}
             onClick={handleAddAndScanAnother}
             disabled={isSubmitting}
-            size="lg"
             className="shrink-0"
           >
             {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Adding...
               </>
             ) : (
               <>
-                <Scan className="mr-2 h-5 w-5" />
+                <Scan className="mr-2 h-4 w-4" />
                 Add & Scan
               </>
             )}
           </Button>
         </div>
 
-        {/* Scan hints */}
-        <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/30 border-b border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300">
-          <strong>Same barcode</strong> = add this book &nbsp;|&nbsp; <strong>Different barcode</strong> = search new book
-        </div>
+        {/* Scan hint - subtle text */}
+        <p className="px-4 py-3 text-sm text-center text-muted-foreground">
+          Scan <span className="font-medium">same barcode</span> to add this book, or <span className="font-medium">different barcode</span> to search another
+        </p>
 
         {/* Main content */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-muted-foreground">Book Details</h3>
+            <h3 className="text-base font-medium">Book Details</h3>
             <button
               type="button"
               className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"

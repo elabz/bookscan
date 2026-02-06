@@ -1,7 +1,7 @@
 
 import React, { MutableRefObject, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { X, Camera } from 'lucide-react';
 
 interface BarcodeScannerUIProps {
   isScanning: boolean;
@@ -59,10 +59,15 @@ export const BarcodeScannerUI: React.FC<BarcodeScannerUIProps> = ({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl p-6 md:p-8 shadow-sm mb-8 animate-slide-up" style={{ animationDelay: '100ms' }}>
-      <h2 className="text-xl font-medium mb-4">Barcode Scanner</h2>
-      <p className="text-muted-foreground mb-6">
-        Position the barcode within the camera view to scan automatically.
-      </p>
+      <div className="text-center mb-6">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
+          <Camera className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-medium mb-2">Scan Barcode with Camera</h2>
+        <p className="text-muted-foreground text-sm">
+          Position the barcode within the camera view to scan automatically
+        </p>
+      </div>
 
       <div
         className="relative w-full mx-auto rounded-lg overflow-hidden"

@@ -48,8 +48,10 @@ Migration SQL files live in `library-scanster/src/db/migrations/` with sequentia
 
 To run a migration against the local Docker PostgreSQL:
 ```bash
-docker exec bookscan-postgres psql -U bookuser -d bookscan -f /dev/stdin < library-scanster/src/db/migrations/NNN_name.sql
+docker exec -i bookscan-postgres psql -U bookuser -d bookscan < library-scanster/src/db/migrations/NNN_name.sql
 ```
+
+**Important**: The `-i` flag is required to keep stdin open for piping SQL files.
 
 Or run raw SQL directly:
 ```bash

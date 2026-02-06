@@ -1,5 +1,6 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BookPlus, Loader2, Scan, Search, AlertTriangle, Camera, ScanBarcode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BarcodeScanner } from '@/components/scan/BarcodeScanner';
@@ -12,6 +13,7 @@ import { EditableBookForm } from '@/components/scan/EditableBookForm';
 import { Book } from '@/types/book';
 import { HardwareScannerTab } from '@/components/scan/HardwareScannerTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DuplicateBookDialog } from '@/components/scan/DuplicateBookDialog';
 
 const SCAN_MODE_STORAGE_KEY = 'addBook_scanMode';
 
@@ -27,9 +29,21 @@ export const ScanTab: React.FC<ScanTabProps> = (props) => {
     return localStorage.getItem(SCAN_MODE_STORAGE_KEY) || 'camera';
   });
 
+  const scannerInputRef = useRef<HTMLInputElement>(null);
+
   const handleScanModeChange = (mode: string) => {
     setScanMode(mode);
     localStorage.setItem(SCAN_MODE_STORAGE_KEY, mode);
+
+    // Focus the scanner input after tab switch
+    // Use requestAnimationFrame after timeout to ensure DOM is ready and focus sticks
+    if (mode === 'scanner') {
+      setTimeout(() => {
+        requestAnimationFrame(() => {
+          scannerInputRef.current?.focus();
+        });
+      }, 100);
+    }
   };
 
   return (
@@ -51,14 +65,17 @@ export const ScanTab: React.FC<ScanTabProps> = (props) => {
             selectedLocationId={selectedLocationId}
             onLocationChange={onLocationChange}
             onSwitchToManual={onSwitchToManual}
+            onSwitchToScanner={() => handleScanModeChange('scanner')}
           />
         </TabsContent>
 
-        <TabsContent value="scanner">
+        <TabsContent value="scanner" tabIndex={-1}>
           <HardwareScannerTab
             selectedLocationId={selectedLocationId ?? null}
             onLocationChange={onLocationChange ?? (() => {})}
             onSwitchToManual={onSwitchToManual}
+            isActive={scanMode === 'scanner'}
+            inputRef={scannerInputRef}
           />
         </TabsContent>
       </Tabs>
@@ -71,13 +88,16 @@ interface CameraScannerContentProps {
   selectedLocationId?: string | null;
   onLocationChange?: (locId: string | null) => void;
   onSwitchToManual?: (isbn13?: string, isbn10?: string) => void;
+  onSwitchToScanner?: () => void;
 }
 
 const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
   selectedLocationId,
   onLocationChange,
   onSwitchToManual,
+  onSwitchToScanner,
 }) => {
+  const navigate = useNavigate();
   const {
     foundBook,
     handleIsbnSearch,
@@ -85,6 +105,9 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
     handleAddAndScanAnother,
     isSubmitting,
     setFoundBook,
+    duplicateBook,
+    showDuplicateDialog,
+    dismissDuplicateDialog,
   } = useAddBook();
 
   const [lastScannedIsbn, setLastScannedIsbn] = useState<string>('');
@@ -189,7 +212,7 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
 
       {foundBook && !isBookNotFound && (
         <div
-          className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm mb-8"
+          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-8 overflow-hidden"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !isSubmitting) {
               e.preventDefault();
@@ -198,83 +221,150 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
           }}
           tabIndex={0}
         >
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-medium">Book Found!</h2>
-            <button
-              type="button"
-              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-              onClick={() => setShowWrongBook(!showWrongBook)}
+          {/* Header: Cover + Title + Add Button */}
+          <div className="flex items-center gap-4 p-4">
+            {/* Cover thumbnail */}
+            <div className="shrink-0 w-16 h-24 rounded-md overflow-hidden bg-muted shadow-sm">
+              {foundBook.cover ? (
+                <img
+                  src={foundBook.cover}
+                  alt={foundBook.title}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <BookPlus className="h-6 w-6 text-muted-foreground/50" />
+                </div>
+              )}
+            </div>
+
+            {/* Title + Author */}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-semibold truncate">{foundBook.title}</h2>
+              <p className="text-sm text-muted-foreground truncate">
+                {foundBook.authors?.join(', ') || 'Unknown Author'}
+              </p>
+            </div>
+
+            {/* Add Button - prominent */}
+            <Button
+              onClick={handleAddAndScanAnother}
+              disabled={isSubmitting}
+              className="shrink-0"
             >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              Not this book?
-            </button>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <Scan className="mr-2 h-4 w-4" />
+                  Add & Scan
+                </>
+              )}
+            </Button>
           </div>
 
-          {showWrongBook && (
-            <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
-              <p className="text-sm text-muted-foreground mb-2">
-                Search by title or enter a different ISBN:
-              </p>
-              <form onSubmit={handleWrongBookSearch} className="flex gap-2">
-                <input
-                  type="text"
-                  value={wrongBookQuery}
-                  onChange={(e) => setWrongBookQuery(e.target.value)}
-                  placeholder='e.g. "The Great Gatsby" or 978-0-743-27356-5'
-                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  autoFocus
-                />
-                <Button type="submit" size="sm" disabled={!wrongBookQuery.trim()}>
-                  <Search className="mr-1 h-3 w-3" /> Search
-                </Button>
-              </form>
+          {/* Main content */}
+          <div className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-medium">Book Details</h3>
               <button
                 type="button"
-                className="mt-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={resetScanState}
+                className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                onClick={() => setShowWrongBook(!showWrongBook)}
               >
-                or scan a different barcode
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Not this book?
               </button>
             </div>
-          )}
 
-          <EditableBookForm book={foundBook} onChange={handleBookFormChange} />
-
-          <div className="mt-6 pt-4 border-t space-y-3">
-            {onLocationChange && (
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                <span className="shrink-0">Location:</span>
-                <LocationPicker
-                  value={selectedLocationId ?? null}
-                  onChange={onLocationChange}
-                />
+            {showWrongBook && (
+              <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Search by title or enter a different ISBN:
+                </p>
+                <form onSubmit={handleWrongBookSearch} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={wrongBookQuery}
+                    onChange={(e) => setWrongBookQuery(e.target.value)}
+                    placeholder='e.g. "The Great Gatsby" or 978-0-743-27356-5'
+                    className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    autoFocus
+                  />
+                  <Button type="submit" size="sm" disabled={!wrongBookQuery.trim()}>
+                    <Search className="mr-1 h-3 w-3" /> Search
+                  </Button>
+                </form>
+                <button
+                  type="button"
+                  className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={resetScanState}
+                >
+                  or scan a different barcode
+                </button>
               </div>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={handleAddAndScanAnother} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  <>
-                    <Scan className="mr-2 h-4 w-4" />
-                    Add & Scan Another
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={handleAddScannedBook}
-                variant="outline"
-                disabled={isSubmitting}
-              >
-                <BookPlus className="mr-2 h-4 w-4" />
-                Add to Library
-              </Button>
+
+            <EditableBookForm book={foundBook} onChange={handleBookFormChange} />
+
+            {/* Bottom actions + location */}
+            <div className="mt-6 pt-4 border-t space-y-3">
+              {onLocationChange && (
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span className="shrink-0">Location:</span>
+                  <LocationPicker
+                    value={selectedLocationId ?? null}
+                    onChange={onLocationChange}
+                  />
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleAddAndScanAnother} disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="mr-2 h-4 w-4" />
+                      Add & Scan Another
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleAddScannedBook}
+                  variant="outline"
+                  disabled={isSubmitting}
+                >
+                  <BookPlus className="mr-2 h-4 w-4" />
+                  Add to Library
+                </Button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Duplicate book dialog */}
+      {duplicateBook && (
+        <DuplicateBookDialog
+          open={showDuplicateDialog}
+          book={duplicateBook}
+          onScanAnother={() => {
+            dismissDuplicateDialog();
+            resetScanState();
+            // Switch to hardware scanner tab with focused input
+            onSwitchToScanner?.();
+          }}
+          onGoToLibrary={() => {
+            dismissDuplicateDialog();
+            navigate('/library');
+          }}
+        />
       )}
     </>
   );

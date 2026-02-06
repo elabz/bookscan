@@ -46,6 +46,9 @@ const ScanPage = () => {
   const [isLoadingSimilar, setIsLoadingSimilar] = useState(false);
   const similarBooksRef = useRef<HTMLDivElement>(null);
 
+  // Key to force BarcodeScanner remount on reset
+  const [scanKey, setScanKey] = useState(0);
+
   const handleLocationChange = (locId: string | null) => {
     setSelectedLocationId(locId);
     if (locId) {
@@ -64,6 +67,7 @@ const ScanPage = () => {
     setShowDuplicateDialog(false);
     setSimilarBooks([]);
     setIsLoadingSimilar(false);
+    setScanKey(k => k + 1); // Force BarcodeScanner remount
   };
 
   const handleScanFailed = () => {
@@ -219,7 +223,7 @@ const ScanPage = () => {
         {!foundBook && !isEditing && !isBookNotFound && (
           <>
             {!scanFailed && (
-              <BarcodeScanner onScanComplete={handleIsbnSearch} onScanFailed={handleScanFailed} />
+              <BarcodeScanner key={scanKey} onScanComplete={handleIsbnSearch} onScanFailed={handleScanFailed} />
             )}
 
             <ManualIsbnEntry

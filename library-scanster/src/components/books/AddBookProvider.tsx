@@ -5,8 +5,15 @@ import { Book as BookType } from '@/types/book';
 import { addBook, searchOpenLibrary } from '@/services/bookService';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchBookByISBN } from '@/services/isbnService';
+import { fetchBookByCode, checkDuplicateInLibrary } from '@/services/isbnService';
 import { updateBookLocation } from '@/services/locationService';
+
+interface DuplicateBook {
+  id: string;
+  title: string;
+  authors: string[];
+  cover_url?: string;
+}
 
 interface AddBookContextType {
   searchResults: BookType[];
@@ -15,6 +22,8 @@ interface AddBookContextType {
   newBook: Partial<BookType>;
   isSubmitting: boolean;
   foundBook: BookType | null;
+  duplicateBook: DuplicateBook | null;
+  showDuplicateDialog: boolean;
   handleSearch: (query: string) => Promise<void>;
   handleManualChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   handleSubmitManual: (e: React.FormEvent) => Promise<void>;
@@ -24,6 +33,7 @@ interface AddBookContextType {
   handleAddAndScanAnother: () => Promise<void>;
   setFoundBook: (book: BookType | null) => void;
   setNewBook: React.Dispatch<React.SetStateAction<Partial<BookType>>>;
+  dismissDuplicateDialog: () => void;
 }
 
 const AddBookContext = createContext<AddBookContextType | undefined>(undefined);
@@ -58,6 +68,13 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
   }, [newBook]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [foundBook, setFoundBook] = useState<BookType | null>(null);
+  const [duplicateBook, setDuplicateBook] = useState<DuplicateBook | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+
+  const dismissDuplicateDialog = () => {
+    setDuplicateBook(null);
+    setShowDuplicateDialog(false);
+  };
 
   const handleSearch = async (query: string) => {
     try {
@@ -182,14 +199,28 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
 
     setIsSearching(true);
     setFoundBook(null);
+    setDuplicateBook(null);
+    setShowDuplicateDialog(false);
 
     try {
       toast({
         title: "Searching...",
-        description: `Looking up ISBN: ${isbn}`,
+        description: `Looking up: ${isbn}`,
       });
 
-      const bookData = await fetchBookByISBN(isbn);
+      // Check for duplicate in user's library first
+      if (userId) {
+        const dupResult = await checkDuplicateInLibrary(isbn);
+        if (dupResult.duplicate && dupResult.book) {
+          setDuplicateBook(dupResult.book);
+          setShowDuplicateDialog(true);
+          setIsSearching(false);
+          return;
+        }
+      }
+
+      // Use unified code lookup (handles ISBN, LCCN, UPC)
+      const bookData = await fetchBookByCode(isbn);
 
       if (bookData) {
         setFoundBook(bookData);
@@ -200,13 +231,13 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
       } else {
         toast({
           title: "Book Not Found",
-          description: "This ISBN wasn't found in any database.",
+          description: "This code wasn't found in any database.",
           variant: "destructive",
         });
         throw new Error('not_found');
       }
-    } catch (error: any) {
-      if (error?.message === 'not_found') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === 'not_found') {
         // Re-throw so ScanTab can show BookNotFoundMessage
         throw error;
       }
@@ -314,6 +345,8 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
     newBook,
     isSubmitting,
     foundBook,
+    duplicateBook,
+    showDuplicateDialog,
     handleSearch,
     handleManualChange,
     handleSubmitManual,
@@ -322,7 +355,8 @@ export const AddBookProvider: React.FC<{ children: React.ReactNode; locationId?:
     handleAddScannedBook,
     handleAddAndScanAnother,
     setFoundBook,
-    setNewBook
+    setNewBook,
+    dismissDuplicateDialog,
   };
 
   return (
