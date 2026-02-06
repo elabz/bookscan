@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Book } from '@/types/book';
 import { EditableField } from '@/components/ui/editable-field';
 import { BookCoverEditor } from './BookCoverEditor';
@@ -12,8 +12,21 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Loader2 } from 'lucide-react';
+import { searchSubjects } from '@/services/subjectService';
 
 interface EditableBookFormProps {
   book: Book;
@@ -96,6 +109,10 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
     book.subjects || []
   );
   const [newSubject, setNewSubject] = useState('');
+  const [subjectSuggestions, setSubjectSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showSubjectPopover, setShowSubjectPopover] = useState(false);
+  const subjectDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Lock state for each field (locked if value exists)
   const [lockedFields, setLockedFields] = useState<Record<string, boolean>>(() => ({
@@ -164,17 +181,20 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
     setCoverUrls(newUrls);
   };
 
-  const handleAddSubject = () => {
-    const trimmed = newSubject.trim();
+  const handleAddSubject = useCallback((name?: string) => {
+    const trimmed = (name || newSubject).trim();
     if (!trimmed) return;
     // Check if subject already exists (case-insensitive)
     if (subjects.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) {
       setNewSubject('');
+      setShowSubjectPopover(false);
       return;
     }
     setSubjects(prev => [...prev, { name: trimmed }]);
     setNewSubject('');
-  };
+    setShowSubjectPopover(false);
+    setSubjectSuggestions([]);
+  }, [newSubject, subjects]);
 
   const handleRemoveSubject = (index: number) => {
     setSubjects(prev => prev.filter((_, i) => i !== index));
@@ -186,6 +206,38 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
       handleAddSubject();
     }
   };
+
+  const handleSubjectInputChange = useCallback((value: string) => {
+    setNewSubject(value);
+
+    // Debounce the search
+    if (subjectDebounceRef.current) {
+      clearTimeout(subjectDebounceRef.current);
+    }
+
+    if (value.trim().length >= 2) {
+      setShowSubjectPopover(true);
+      subjectDebounceRef.current = setTimeout(async () => {
+        setIsLoadingSuggestions(true);
+        try {
+          const suggestions = await searchSubjects(value.trim());
+          // Filter out already selected subjects
+          const filtered = suggestions.filter(
+            s => !subjects.some(existing => existing.name.toLowerCase() === s.toLowerCase())
+          );
+          setSubjectSuggestions(filtered);
+        } catch (error) {
+          console.error('Error fetching subject suggestions:', error);
+          setSubjectSuggestions([]);
+        } finally {
+          setIsLoadingSuggestions(false);
+        }
+      }, 300);
+    } else {
+      setShowSubjectPopover(false);
+      setSubjectSuggestions([]);
+    }
+  }, [subjects]);
 
   return (
     <div className="space-y-6">
@@ -471,18 +523,59 @@ export const EditableBookForm: React.FC<EditableBookFormProps> = ({
           ))}
         </div>
         <div className="flex gap-2 max-w-md">
-          <Input
-            value={newSubject}
-            onChange={(e) => setNewSubject(e.target.value)}
-            onKeyDown={handleSubjectKeyDown}
-            placeholder="Add a subject..."
-            className="h-9"
-          />
+          <Popover open={showSubjectPopover} onOpenChange={setShowSubjectPopover}>
+            <PopoverTrigger asChild>
+              <div className="flex-1 relative">
+                <Input
+                  value={newSubject}
+                  onChange={(e) => handleSubjectInputChange(e.target.value)}
+                  onKeyDown={handleSubjectKeyDown}
+                  onFocus={() => newSubject.trim().length >= 2 && setShowSubjectPopover(true)}
+                  placeholder="Add a subject..."
+                  className="h-9"
+                />
+                {isLoadingSuggestions && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[300px]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+              <Command>
+                <CommandList>
+                  {subjectSuggestions.length === 0 && !isLoadingSuggestions && newSubject.trim() && (
+                    <CommandEmpty>
+                      <button
+                        type="button"
+                        className="w-full px-2 py-1.5 text-sm text-left hover:bg-accent rounded-sm"
+                        onClick={() => handleAddSubject()}
+                      >
+                        Add "{newSubject.trim()}" as new subject
+                      </button>
+                    </CommandEmpty>
+                  )}
+                  {subjectSuggestions.length > 0 && (
+                    <CommandGroup>
+                      {subjectSuggestions.map((suggestion) => (
+                        <CommandItem
+                          key={suggestion}
+                          value={suggestion}
+                          onSelect={() => handleAddSubject(suggestion)}
+                          className="cursor-pointer"
+                        >
+                          {suggestion}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            onClick={handleAddSubject}
+            onClick={() => handleAddSubject()}
             disabled={!newSubject.trim()}
             className="h-9 px-3"
           >

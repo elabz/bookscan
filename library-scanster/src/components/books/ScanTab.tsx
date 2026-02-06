@@ -1,6 +1,6 @@
 
-import React, { useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { BookPlus, Loader2, Scan, Search, AlertTriangle, Camera, ScanBarcode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BarcodeScanner } from '@/components/scan/BarcodeScanner';
@@ -98,6 +98,7 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
   onSwitchToScanner,
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const {
     foundBook,
     handleIsbnSearch,
@@ -116,6 +117,32 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
   const [scannerKey, setScannerKey] = useState(0);
   const [showWrongBook, setShowWrongBook] = useState(false);
   const [wrongBookQuery, setWrongBookQuery] = useState('');
+
+  // Apply cover URLs returned from TakePhotoPage
+  const appliedCoverRef = useRef(false);
+  useEffect(() => {
+    const state = location.state as {
+      coverUrl?: string;
+      coverSmallUrl?: string;
+      coverLargeUrl?: string;
+    } | null;
+
+    if (state?.coverUrl && foundBook && !appliedCoverRef.current) {
+      appliedCoverRef.current = true;
+      setFoundBook({
+        ...foundBook,
+        cover: state.coverUrl,
+        coverSmall: state.coverSmallUrl || foundBook.coverSmall,
+        coverLarge: state.coverLargeUrl || foundBook.coverLarge,
+      });
+      // Clear the location state to prevent re-applying on re-renders
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+    // Reset the flag if there's no cover URL in state (new navigation)
+    if (!state?.coverUrl) {
+      appliedCoverRef.current = false;
+    }
+  }, [location.state, foundBook, setFoundBook, navigate, location.pathname]);
 
   const handleBookFormChange = useCallback(
     (updatedBook: Book) => {
@@ -213,13 +240,6 @@ const CameraScannerContent: React.FC<CameraScannerContentProps> = ({
       {foundBook && !isBookNotFound && (
         <div
           className="bg-white dark:bg-gray-800 rounded-xl shadow-sm mb-8 overflow-hidden"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !isSubmitting) {
-              e.preventDefault();
-              handleAddAndScanAnother();
-            }
-          }}
-          tabIndex={0}
         >
           {/* Header: Cover + Title + Add Button */}
           <div className="flex items-center gap-4 p-4">

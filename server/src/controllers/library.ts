@@ -1005,3 +1005,36 @@ export const removeBookFromLibrary = async (req: AuthRequest, res: Response) => 
     return res.status(500).json({ error: 'Failed to remove book' });
   }
 };
+
+// Search subjects for autocomplete
+export const searchSubjects = async (req: Request, res: Response) => {
+  try {
+    const query = (req.query.q as string || '').trim();
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+
+    if (!query) {
+      // Return popular subjects if no query
+      const result = await pool.query(
+        'SELECT name FROM approved_subjects ORDER BY name LIMIT $1',
+        [limit]
+      );
+      return res.json(result.rows.map(r => r.name));
+    }
+
+    // Search for subjects matching the query (case-insensitive prefix match)
+    const result = await pool.query(
+      `SELECT name FROM approved_subjects
+       WHERE name ILIKE $1
+       ORDER BY
+         CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END,
+         name
+       LIMIT $3`,
+      [`%${query}%`, `${query}%`, limit]
+    );
+
+    return res.json(result.rows.map(r => r.name));
+  } catch (err) {
+    console.error('Error searching subjects:', err);
+    return res.status(500).json({ error: 'Failed to search subjects' });
+  }
+};

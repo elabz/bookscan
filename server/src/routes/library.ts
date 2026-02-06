@@ -17,6 +17,7 @@ import {
   removeBookFromLibrary,
   getPendingEdits,
   reviewEdit,
+  searchSubjects,
 } from '../controllers/library';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ const router = express.Router();
 router.get('/featured', getFeaturedBooks);
 router.get('/book/:id/public', getBookById);
 router.get('/lookup', lookupBookByCode);
+router.get('/subjects/search', searchSubjects);
 
 // Protected routes
 router.use(verifySession());
