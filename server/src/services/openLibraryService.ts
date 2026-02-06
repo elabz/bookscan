@@ -51,6 +51,7 @@ interface OLLanguage {
 interface OLDetails {
   title?: string;
   authors?: OLAuthor[];
+  contributions?: string[];
   publishers?: (OLPublisher | string)[];
   publish_date?: string;
   description?: string | { value?: string; type?: string };
@@ -181,16 +182,30 @@ const extractDescription = (details?: OLDetails): string => {
 };
 
 const extractAuthors = (details?: OLDetails): string[] => {
-  if (!details?.authors) return ['Unknown Author'];
-
-  try {
-    return details.authors.map((author) => {
-      return author.name || author.title || 'Unknown Author';
-    });
-  } catch (error) {
-    console.error('Error extracting authors:', error);
-    return ['Unknown Author'];
+  // Try authors array first
+  if (details?.authors && details.authors.length > 0) {
+    try {
+      return details.authors.map((author) => {
+        return author.name || author.title || 'Unknown Author';
+      });
+    } catch (error) {
+      console.error('Error extracting authors:', error);
+    }
   }
+
+  // Fall back to contributions (e.g., "Brian Froud (Illustrator)")
+  if (details?.contributions && details.contributions.length > 0) {
+    try {
+      return details.contributions.map((contrib) => {
+        // Remove role in parentheses: "Brian Froud (Illustrator)" -> "Brian Froud"
+        return contrib.replace(/\s*\([^)]*\)\s*$/, '').trim();
+      });
+    } catch (error) {
+      console.error('Error extracting contributions:', error);
+    }
+  }
+
+  return ['Unknown Author'];
 };
 
 const extractPublisher = (details?: OLDetails): string | undefined => {
